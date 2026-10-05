@@ -162,6 +162,6 @@ The compiled shaded jar with all bundled dependencies (Luaj, shaded) will be gen
 
 ## 📄 License & Sovereign Authorship
 
-Copyright © 2026 [**Chagui68**](https://github.com/Chagui68) · [**DrakesCraft Labs**](https://github.com/DrakesCraft-Labs).
+Copyright © 2026 [**Chagui68**](https://github.com/Chagui68) · [**DrakesCraft Labs**](https://github.com/SlimefunNewHorizons).
 
 This project is an **original sovereign creation** engineered by **Chagui68** for the DrakesCraft network. All intellectual authorship belongs to Chagui68. Commercial resale, repackaging in paid setups, or removing creator attribution is strictly prohibited.
