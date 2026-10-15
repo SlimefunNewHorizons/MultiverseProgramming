@@ -754,7 +754,8 @@ public final class ComputerListener implements Listener {
         String message = event.getMessage();
         for (com.multiverse.programming.peripheral.NpcPeripheral npc : com.multiverse.programming.peripheral.NpcPeripheral.getActiveNpcs()) {
             Location loc = npc.getLocation();
-            if (loc != null && loc.getWorld() != null && loc.getWorld().equals(player.getWorld())) {
+            org.bukkit.World npcWorld = com.multiverse.programming.peripheral.NpcPeripheral.worldOf(loc);
+            if (npcWorld != null && npcWorld.equals(player.getWorld())) {
                 if (loc.distanceSquared(player.getLocation()) <= 256.0) {
                     npc.recordPlayerResponse(player.getName(), message);
                 }

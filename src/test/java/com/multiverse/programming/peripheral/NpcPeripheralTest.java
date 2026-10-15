@@ -64,13 +64,29 @@ class NpcPeripheralTest {
         new NpcPeripheral(plugin, location.clone());
         new NpcPeripheral(plugin, location.clone());
         long atBlock = NpcPeripheral.getActiveNpcs().stream()
-                .filter(n -> n.getLocation().getWorld() == world && n.getLocation().getBlockY() == 64
+                .filter(n -> NpcPeripheral.worldOf(n.getLocation()) == world && n.getLocation().getBlockY() == 64
                         && n.getLocation().getBlockX() == 0 && n.getLocation().getBlockZ() == 0)
                 .count();
         assertEquals(1, atBlock);
 
         NpcPeripheral.cleanupAt(location);
         assertFalse(NpcPeripheral.hasNpcAt(location));
+    }
+
+    @Test
+    @DisplayName("Npc registry survives and prunes entries whose world was unloaded")
+    void testRegistryToleratesUnloadedWorld() throws Exception {
+        Location staleLoc = new Location(mock(World.class), 5, 64, 5);
+        NpcPeripheral stale = new NpcPeripheral(plugin, staleLoc);
+        // Simulate the world being unloaded/collected: Location keeps it as a weak reference.
+        java.lang.reflect.Field worldRef = Location.class.getDeclaredField("world");
+        worldRef.setAccessible(true);
+        worldRef.set(staleLoc, new java.lang.ref.WeakReference<World>(null));
+        assertThrows(IllegalArgumentException.class, staleLoc::getWorld);
+
+        assertDoesNotThrow(() -> NpcPeripheral.hasNpcAt(location));
+        assertDoesNotThrow(() -> new NpcPeripheral(plugin, location.clone()));
+        assertFalse(NpcPeripheral.getActiveNpcs().contains(stale));
     }
 
     @Test

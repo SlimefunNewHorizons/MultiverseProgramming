@@ -67,8 +67,23 @@ public final class NpcPeripheral implements Peripheral {
         return false;
     }
 
+    /**
+     * World of a location, or null once that world is unloaded. Location keeps the world as a weak
+     * reference and getWorld() throws "World unloaded" after it is collected, so registry entries
+     * outliving their world must never call it directly.
+     */
+    public static World worldOf(Location loc) {
+        if (loc == null) return null;
+        try {
+            return loc.getWorld();
+        } catch (IllegalArgumentException unloaded) {
+            return null;
+        }
+    }
+
     private static boolean isSameBlock(Location a, Location b) {
-        return a != null && b != null && a.getWorld() != null && a.getWorld().equals(b.getWorld())
+        World world = worldOf(a);
+        return world != null && b != null && world.equals(worldOf(b))
                 && a.getBlockX() == b.getBlockX() && a.getBlockY() == b.getBlockY() && a.getBlockZ() == b.getBlockZ();
     }
 
@@ -93,8 +108,8 @@ public final class NpcPeripheral implements Peripheral {
     public NpcPeripheral(JavaPlugin plugin, Location location) {
         this.plugin = plugin;
         this.location = location;
-        // One registered NPC per block: each program run builds a new peripheral instance.
-        ACTIVE_NPCS.removeIf(n -> isSameBlock(n.getLocation(), location));
+        // One registered NPC per block (each program run builds a new instance); also drop entries whose world unloaded.
+        ACTIVE_NPCS.removeIf(n -> worldOf(n.getLocation()) == null || isSameBlock(n.getLocation(), location));
         ACTIVE_NPCS.add(this);
     }
 
