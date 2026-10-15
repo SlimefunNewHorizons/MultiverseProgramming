@@ -3,7 +3,6 @@ package com.multiverse.programming.peripheral;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
@@ -11,8 +10,8 @@ import org.bukkit.block.Crafter;
 import org.bukkit.block.data.Directional;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemCraftResult;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.Recipe;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.Map;
@@ -71,23 +70,19 @@ public final class CrafterPeripheral implements Peripheral {
                     ItemStack[] matrix = new ItemStack[9];
                     for (int i = 0; i < 9; i++) {
                         ItemStack item = inv.getItem(i);
-                        matrix[i] = (item != null && !item.getType().isAir()) ? item.clone() : new ItemStack(Material.AIR);
+                        matrix[i] = (item != null && !item.getType().isAir()) ? item.clone() : null;
                     }
 
-                    Recipe recipe = Bukkit.getCraftingRecipe(matrix, crafter.getWorld());
-                    if (recipe != null && recipe.getResult() != null && !recipe.getResult().getType().isAir()) {
-                        ItemStack result = recipe.getResult().clone();
-                        // Consume 1 item from each active ingredient slot
+                    // craftItemResult runs the real recipe: special recipes keep their NBT (dyes, shulker
+                    // recolor, book copies) and remainders such as empty buckets stay in the matrix.
+                    ItemCraftResult craft = Bukkit.craftItemResult(matrix, crafter.getWorld());
+                    ItemStack crafted = craft.getResult();
+                    if (crafted != null && !crafted.getType().isAir()) {
+                        ItemStack result = crafted.clone();
+                        ItemStack[] remaining = craft.getResultingMatrix();
                         for (int i = 0; i < 9; i++) {
-                            ItemStack item = inv.getItem(i);
-                            if (item != null && !item.getType().isAir()) {
-                                item.setAmount(item.getAmount() - 1);
-                                if (item.getAmount() <= 0) {
-                                    inv.setItem(i, null);
-                                } else {
-                                    inv.setItem(i, item);
-                                }
-                            }
+                            ItemStack left = i < remaining.length ? remaining[i] : null;
+                            inv.setItem(i, left == null || left.getType().isAir() ? null : left);
                         }
 
                         // Determine output location and target container: facing direction or above
@@ -115,8 +110,12 @@ public final class CrafterPeripheral implements Peripheral {
                         if (result != null && !result.getType().isAir() && result.getAmount() > 0) {
                             crafter.getWorld().dropItemNaturally(dropLoc, result);
                         }
-                        crafter.setTriggered(true);
-                        crafter.update(true);
+                        for (ItemStack overflow : craft.getOverflowItems()) {
+                            if (overflow != null && !overflow.getType().isAir()) {
+                                crafter.getWorld().dropItemNaturally(dropLoc, overflow);
+                            }
+                        }
+                        // No crafter.update() here: it would write back the pre-craft snapshot and restore the ingredients.
                         return LuaBoolean.TRUE;
                     }
 

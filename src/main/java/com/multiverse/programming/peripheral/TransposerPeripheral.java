@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package com.multiverse.programming.peripheral;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.event.inventory.InventoryMoveItemEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.luaj.vm2.LuaBoolean;
 import org.luaj.vm2.LuaError;
@@ -68,6 +72,23 @@ public final class TransposerPeripheral implements Peripheral {
             return holder.getInventory();
         }
         return null;
+    }
+
+    /**
+     * Blocks shulker-in-shulker nesting (vanilla forbids it) and fires InventoryMoveItemEvent so
+     * container-lock and claim plugins can veto the transfer just as they do for hoppers.
+     */
+    static boolean isTransferAllowed(Inventory from, ItemStack moving, Inventory to) {
+        if (to.getType() == InventoryType.SHULKER_BOX && moving.getType().name().endsWith("SHULKER_BOX")) {
+            return false;
+        }
+        PluginManager pm = Bukkit.getPluginManager();
+        if (pm == null) {
+            return true;
+        }
+        InventoryMoveItemEvent event = new InventoryMoveItemEvent(from, moving.clone(), to, true);
+        pm.callEvent(event);
+        return !event.isCancelled();
     }
 
     @Override
@@ -190,6 +211,10 @@ public final class TransposerPeripheral implements Peripheral {
 
                     ItemStack moving = source.clone();
                     moving.setAmount(toMove);
+
+                    if (!isTransferAllowed(fromInv, moving, toInv)) {
+                        return LuaInteger.valueOf(0);
+                    }
 
                     int transferred;
                     if (toSlot >= 1 && toSlot <= toInv.getSize()) {

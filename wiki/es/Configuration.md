@@ -91,7 +91,7 @@ blueprint-player-quota-mb: 15.0
 | `quarry-block` | `string` | `BLAST_FURNACE` | Material usado como Mejora de Motor de Cantera (funciona exclusivamente con la tortuga) |
 | `enable-recipe-*` | `boolean` | `true` | Interruptor independiente para activar/desactivar la receta de crafteo de cada máquina |
 | `enable-*` | `boolean` | `true` | Interruptor independiente para activar/desactivar la funcionalidad de cada máquina |
-| `worldguard-protection-check` | `boolean` | `true` | Evita que las tortugas y canteras operen en regiones de WorldGuard sin permisos |
+| `worldguard-protection-check` | `boolean` | `true` | Evita que las tortugas y canteras construyan, minen o se muevan en regiones de WorldGuard sin permisos |
 | `protection-stones-require-owner` | `boolean` | `false` | Si es `true`, exige que el dueño de la tortuga sea propietario (no solo miembro) en ProtectionStones |
 | `turtle-fuel-required` | `boolean` | `false` | Si es `true`, genera un cofre de combustible con holograma `"Place fuel here"` y consume combustible |
 | `turtle-require-materials` | `boolean` | `false` | Si es `true`, genera un cofre de materiales con holograma `"Place construction blocks here"` |
@@ -167,6 +167,6 @@ El nodo `multiverseprogramming.turtle` decide si un jugador puede interactuar co
 ## Seguridad y Protección de Regiones
 
 El plugin se integra automáticamente con **WorldGuard**, **ProtectionStones** y **CoreProtect**:
-1. **Verificación de permisos de región**: Cuando una tortuga o cantera intenta construir o minar, el área de trabajo se valida contra las regiones protegidas. Si el dueño no tiene permisos de construcción en la región, la acción se cancela de inmediato.
+1. **Verificación de permisos de región**: Los blueprints y las canteras validan todo su volumen antes de empezar, y cada `dig`, `place` y movimiento de la tortuga comprueba su bloque destino. Si el dueño no tiene permisos de construcción en la región, la acción se cancela. También se comprueban las islas de BentoBox.
 2. **Registro de bloques en CoreProtect**: Todas las rupturas de bloques provocadas por tortugas y canteras quedan registradas en el historial de CoreProtect con sus metadatos y coordenadas.
 3. **Protección contra duplicación**: Se bloquea la inserción de libros escritos con exploits NBT o contenedores anidados en marcos de ítems, vasijas y atriles para garantizar la estabilidad económica del servidor.

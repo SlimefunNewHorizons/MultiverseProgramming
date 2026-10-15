@@ -26,7 +26,7 @@ Bienvenido a la documentación técnica interna de **MultiverseProgramming**. Es
    - Máquina de estados de la Tortuga, inventario y acumulador de combustible
    - Mejora de Cantera Lateral (Quarry Engine): acoplamiento físico en lockstep, cofres duales y pausa automática
    - Detección dinámica de periféricos (`PeripheralManager`) y análisis de los 9 periféricos
-   - Protección de reclamos (WorldGuard, GriefPrevention, Towny, Lands, Residence)
+   - Protección de reclamos (WorldGuard, ProtectionStones, BentoBox)
    - Auditoría y registro con CoreProtect (`CoreProtectBridge`)
 
 ---

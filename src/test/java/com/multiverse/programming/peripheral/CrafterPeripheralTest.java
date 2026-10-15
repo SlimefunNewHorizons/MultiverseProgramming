@@ -87,4 +87,36 @@ class CrafterPeripheralTest {
         assertFalse(table.get("isCrafting").call().toboolean());
         assertTrue(table.get("isCrafting").call().toboolean());
     }
+
+    @Test
+    @DisplayName("craft keeps remainders and never writes back the pre-craft snapshot")
+    void testCraftUsesResultingMatrix() {
+        org.bukkit.inventory.ItemStack milk = mock(org.bukkit.inventory.ItemStack.class);
+        when(milk.getType()).thenReturn(org.bukkit.Material.MILK_BUCKET);
+        when(inventory.getItem(0)).thenReturn(milk);
+
+        org.bukkit.inventory.ItemStack cake = mock(org.bukkit.inventory.ItemStack.class);
+        when(cake.getType()).thenReturn(org.bukkit.Material.CAKE);
+        when(cake.getAmount()).thenReturn(1);
+        when(cake.clone()).thenReturn(cake);
+        org.bukkit.inventory.ItemStack bucket = mock(org.bukkit.inventory.ItemStack.class);
+        when(bucket.getType()).thenReturn(org.bukkit.Material.BUCKET);
+        org.bukkit.inventory.ItemStack[] remaining = new org.bukkit.inventory.ItemStack[9];
+        remaining[0] = bucket;
+
+        org.bukkit.inventory.ItemCraftResult craftResult = mock(org.bukkit.inventory.ItemCraftResult.class);
+        when(craftResult.getResult()).thenReturn(cake);
+        when(craftResult.getResultingMatrix()).thenReturn(remaining);
+        when(org.bukkit.Bukkit.getServer().craftItemResult(any(org.bukkit.inventory.ItemStack[].class), any(World.class)))
+                .thenReturn(craftResult);
+
+        when(crafterBlock.getBlock()).thenReturn(block);
+        when(location.clone()).thenReturn(location);
+        when(location.add(anyDouble(), anyDouble(), anyDouble())).thenReturn(location);
+
+        assertTrue(crafterPeripheral.toLuaTable().get("craft").call().toboolean());
+        verify(inventory).setItem(0, bucket);
+        verify(inventory).setItem(1, null);
+        verify(crafterBlock, never()).update(anyBoolean());
+    }
 }

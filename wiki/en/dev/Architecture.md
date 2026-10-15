@@ -28,7 +28,7 @@ This document details the internal design, threading model, security sandbox, an
 1. **Configuration**: Initializes [`ConfigManager`](file:///c:/Users/danie/OneDrive/Documentos/Github/Personal/MultiverseProgramming/src/main/java/com/multiverse/programming/ConfigManager.java), validates keys, applies backward-compatible defaults, and logs loaded peripherals.
 2. **Third-Party Integrations**:
    - Soft-depends on `CoreProtect` (`CoreProtectBridge`): verifies API version 9+ for audit logging.
-   - Soft-depends on claims plugins (`ProtectionManager`): hooks into `WorldGuard`, `GriefPrevention`, `Towny`, `Lands`, and `Residence`.
+   - Soft-depends on claims plugins (`ProtectionManager`): hooks into `WorldGuard`, `ProtectionStones` and `BentoBox`.
 3. **Core Managers**:
    - [`DiskManager`](file:///c:/Users/danie/OneDrive/Documentos/Github/Personal/MultiverseProgramming/src/main/java/com/multiverse/programming/DiskManager.java): Prepares floppy disk factories and template programs.
    - [`BlueprintManager`](file:///c:/Users/danie/OneDrive/Documentos/Github/Personal/MultiverseProgramming/src/main/java/com/multiverse/programming/blueprint/BlueprintManager.java): Scans `plugins/MultiverseProgramming/blueprints/`, loads metadata into cache, and registers default community blueprints.

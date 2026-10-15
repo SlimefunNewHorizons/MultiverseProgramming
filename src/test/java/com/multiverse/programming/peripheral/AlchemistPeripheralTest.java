@@ -107,4 +107,26 @@ class AlchemistPeripheralTest {
         assertFalse(res.arg(1).toboolean());
         assertTrue(res.arg(2).tojstring().contains("Missing"));
     }
+
+    @Test
+    @DisplayName("Only plain water bottles count as brewing base and variants resolve")
+    void testWaterBottleAndVariants() {
+        org.bukkit.inventory.ItemStack water = mock(org.bukkit.inventory.ItemStack.class);
+        when(water.getType()).thenReturn(org.bukkit.Material.POTION);
+        org.bukkit.inventory.meta.PotionMeta waterMeta = mock(org.bukkit.inventory.meta.PotionMeta.class);
+        when(waterMeta.getBasePotionType()).thenReturn(org.bukkit.potion.PotionType.WATER);
+        when(water.getItemMeta()).thenReturn(waterMeta);
+        assertTrue(AlchemistPeripheral.isWaterBottle(water));
+
+        org.bukkit.inventory.ItemStack strength = mock(org.bukkit.inventory.ItemStack.class);
+        when(strength.getType()).thenReturn(org.bukkit.Material.POTION);
+        org.bukkit.inventory.meta.PotionMeta strengthMeta = mock(org.bukkit.inventory.meta.PotionMeta.class);
+        when(strengthMeta.getBasePotionType()).thenReturn(org.bukkit.potion.PotionType.STRENGTH);
+        when(strength.getItemMeta()).thenReturn(strengthMeta);
+        assertFalse(AlchemistPeripheral.isWaterBottle(strength));
+
+        assertEquals(org.bukkit.potion.PotionType.LONG_SWIFTNESS,
+                AlchemistPeripheral.variantOf(org.bukkit.potion.PotionType.SWIFTNESS, "LONG_"));
+        assertNull(AlchemistPeripheral.variantOf(org.bukkit.potion.PotionType.FIRE_RESISTANCE, "STRONG_"));
+    }
 }

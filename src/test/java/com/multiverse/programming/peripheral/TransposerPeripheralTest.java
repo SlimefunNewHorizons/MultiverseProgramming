@@ -93,4 +93,19 @@ class TransposerPeripheralTest {
         assertEquals(16, item.get("count").toint());
         assertEquals(64, item.get("maxStack").toint());
     }
+
+    @Test
+    @DisplayName("Transposer refuses shulker boxes into shulker boxes")
+    void testNoNestedShulkers() {
+        org.bukkit.inventory.Inventory from = mock(org.bukkit.inventory.Inventory.class);
+        org.bukkit.inventory.Inventory shulkerInv = mock(org.bukkit.inventory.Inventory.class);
+        when(shulkerInv.getType()).thenReturn(org.bukkit.event.inventory.InventoryType.SHULKER_BOX);
+        org.bukkit.inventory.ItemStack box = mock(org.bukkit.inventory.ItemStack.class);
+        when(box.getType()).thenReturn(org.bukkit.Material.RED_SHULKER_BOX);
+        assertFalse(TransposerPeripheral.isTransferAllowed(from, box, shulkerInv));
+
+        org.bukkit.inventory.Inventory chest = mock(org.bukkit.inventory.Inventory.class);
+        when(chest.getType()).thenReturn(org.bukkit.event.inventory.InventoryType.CHEST);
+        assertTrue(TransposerPeripheral.isTransferAllowed(from, box, chest));
+    }
 }

@@ -27,6 +27,7 @@ import org.luaj.vm2.lib.ZeroArgFunction;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Predicate;
 
 /**
  * Peripheral that manages automated alchemical synthesis, recipe querying,
@@ -69,11 +70,21 @@ public final class AlchemistPeripheral implements Peripheral {
         return list;
     }
 
+    // Only plain water bottles are a valid base; any other POTION (e.g. the previous output) must not be consumed.
+    static boolean isWaterBottle(ItemStack item) {
+        return item != null && item.getType() == Material.POTION
+                && item.getItemMeta() instanceof PotionMeta meta && meta.getBasePotionType() == PotionType.WATER;
+    }
+
     private boolean consumeItem(Material mat, int amount) {
+        return consumeItem(item -> item.getType() == mat, amount);
+    }
+
+    private boolean consumeItem(Predicate<ItemStack> matches, int amount) {
         int needed = amount;
         for (Inventory inv : getConnectedInventories()) {
             for (ItemStack item : inv.getContents()) {
-                if (item != null && item.getType() == mat && item.getAmount() > 0) {
+                if (item != null && matches.test(item) && item.getAmount() > 0) {
                     int take = Math.min(needed, item.getAmount());
                     item.setAmount(item.getAmount() - take);
                     needed -= take;
@@ -85,10 +96,14 @@ public final class AlchemistPeripheral implements Peripheral {
     }
 
     private boolean hasItem(Material mat, int amount) {
+        return hasItem(item -> item.getType() == mat, amount);
+    }
+
+    private boolean hasItem(Predicate<ItemStack> matches, int amount) {
         int count = 0;
         for (Inventory inv : getConnectedInventories()) {
             for (ItemStack item : inv.getContents()) {
-                if (item != null && item.getType() == mat) {
+                if (item != null && matches.test(item)) {
                     count += item.getAmount();
                     if (count >= amount) return true;
                 }
@@ -99,6 +114,8 @@ public final class AlchemistPeripheral implements Peripheral {
 
     private boolean depositItem(ItemStack item) {
         for (Inventory inv : getConnectedInventories()) {
+            // addItem ignores brewing stand slot rules (would fill ingredient/fuel slots)
+            if (inv instanceof BrewerInventory) continue;
             if (inv.firstEmpty() != -1) {
                 inv.addItem(item);
                 return true;
@@ -130,6 +147,15 @@ public final class AlchemistPeripheral implements Peripheral {
             case "SLOW_FALLING" -> Material.PHANTOM_MEMBRANE;
             default -> null;
         };
+    }
+
+    /** LONG_/STRONG_ variant of a base potion type, or null when vanilla has none (e.g. STRONG_FIRE_RESISTANCE). */
+    static PotionType variantOf(PotionType base, String prefix) {
+        try {
+            return PotionType.valueOf(prefix + base.name());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private PotionType parsePotionType(String name) {
@@ -210,20 +236,35 @@ public final class AlchemistPeripheral implements Peripheral {
                     return varargsOf(LuaBoolean.FALSE, LuaString.valueOf("Unknown potion type: " + potionName));
                 }
 
-                Material ingredient = getIngredientForType(potionName);
+                // Ingredient lookup by the canonical type so aliases (REGEN, FIRE, INVIS...) work too
+                Material ingredient = getIngredientForType(pType.name());
                 if (ingredient == null) {
                     return varargsOf(LuaBoolean.FALSE, LuaString.valueOf("No recipe ingredient known for: " + potionName));
                 }
 
+                // Modifier (Redstone for long, Glowstone for strong) must map to a real potion variant
+                boolean longMod = modifier.contains("long") || modifier.contains("extend");
+                boolean strongMod = modifier.contains("strong") || modifier.contains("ii") || modifier.contains("2");
+                if (longMod && strongMod) {
+                    return varargsOf(LuaBoolean.FALSE, LuaString.valueOf("A potion cannot be both extended and upgraded"));
+                }
+                PotionType resultType = pType;
+                if (longMod || strongMod) {
+                    resultType = variantOf(pType, longMod ? "LONG_" : "STRONG_");
+                    if (resultType == null) {
+                        return varargsOf(LuaBoolean.FALSE, LuaString.valueOf(pType.name() + " has no " + (longMod ? "extended" : "upgraded") + " variant"));
+                    }
+                }
+                final PotionType finalType = resultType;
+
                 return SyncDispatcher.sync(plugin, () -> {
-                    // Check base ingredient: Glass Bottle or Water Bottle
-                    Material bottleMat = Material.POTION;
-                    if (!hasItem(bottleMat, 1)) {
+                    // Check base ingredient: Water Bottle
+                    if (!hasItem(AlchemistPeripheral::isWaterBottle, 1)) {
                         return varargsOf(LuaBoolean.FALSE, LuaString.valueOf("Missing Water Bottle in adjacent containers"));
                     }
 
                     // Check Nether wart for non-weakness potions
-                    boolean needsNetherWart = !potionName.equalsIgnoreCase("WEAKNESS");
+                    boolean needsNetherWart = pType != PotionType.WEAKNESS;
                     if (needsNetherWart && !hasItem(Material.NETHER_WART, 1)) {
                         return varargsOf(LuaBoolean.FALSE, LuaString.valueOf("Missing Nether Wart in adjacent containers"));
                     }
@@ -232,10 +273,6 @@ public final class AlchemistPeripheral implements Peripheral {
                     if (!hasItem(ingredient, 1)) {
                         return varargsOf(LuaBoolean.FALSE, LuaString.valueOf("Missing ingredient " + ingredient.name() + " in adjacent containers"));
                     }
-
-                    // Check modifier (Redstone for long, Glowstone for strong)
-                    boolean longMod = modifier.contains("long") || modifier.contains("extend");
-                    boolean strongMod = modifier.contains("strong") || modifier.contains("ii") || modifier.contains("2");
 
                     if (longMod && !hasItem(Material.REDSTONE, 1)) {
                         return varargsOf(LuaBoolean.FALSE, LuaString.valueOf("Missing Redstone for extended potion"));
@@ -248,7 +285,7 @@ public final class AlchemistPeripheral implements Peripheral {
                     }
 
                     // Consume items
-                    consumeItem(bottleMat, 1);
+                    consumeItem(AlchemistPeripheral::isWaterBottle, 1);
                     if (needsNetherWart) consumeItem(Material.NETHER_WART, 1);
                     consumeItem(ingredient, 1);
                     if (longMod) consumeItem(Material.REDSTONE, 1);
@@ -260,7 +297,7 @@ public final class AlchemistPeripheral implements Peripheral {
                     ItemStack potionItem = new ItemStack(finalMat);
                     PotionMeta meta = (PotionMeta) potionItem.getItemMeta();
                     if (meta != null) {
-                        meta.setBasePotionType(pType);
+                        meta.setBasePotionType(finalType);
                         potionItem.setItemMeta(meta);
                     }
 

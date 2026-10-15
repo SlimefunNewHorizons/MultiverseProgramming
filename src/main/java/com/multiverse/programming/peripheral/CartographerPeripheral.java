@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package com.multiverse.programming.peripheral;
 
+import com.multiverse.programming.MultiverseProgrammingPlugin;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -38,6 +39,9 @@ import java.util.Locale;
 public final class CartographerPeripheral implements Peripheral {
 
     public static final String SCOREBOARD_TAG = "multiverse_cartographer";
+    private static final BlockFace[] ADJACENT_FACES = {
+            BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.UP, BlockFace.DOWN
+    };
 
     private final JavaPlugin plugin;
     private final Location location;
@@ -168,6 +172,39 @@ public final class CartographerPeripheral implements Peripheral {
         return false;
     }
 
+    private Material monitorMaterial() {
+        if (plugin instanceof MultiverseProgrammingPlugin mp && mp.getConfigManager() != null) {
+            return mp.getConfigManager().getMonitorBlock();
+        }
+        return Material.OCHRE_FROGLIGHT;
+    }
+
+    /**
+     * Takes one MAP (or else one PAPER) from an adjacent container so createMap is not a free item source.
+     */
+    boolean consumeBlankMap() {
+        Block block = location.getBlock();
+        for (Material blank : new Material[]{Material.MAP, Material.PAPER}) {
+            for (BlockFace face : ADJACENT_FACES) {
+                Block rel = block.getRelative(face);
+                if (rel != null && rel.getState() instanceof InventoryHolder holder) {
+                    Inventory inv = holder.getInventory();
+                    int slot = inv.first(blank);
+                    if (slot == -1) continue;
+                    ItemStack stack = inv.getItem(slot);
+                    if (stack == null || stack.getAmount() <= 1) {
+                        inv.clear(slot);
+                    } else {
+                        stack.setAmount(stack.getAmount() - 1);
+                        inv.setItem(slot, stack);
+                    }
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public String generateAsciiMap(int radius) {
         World world = location.getWorld();
         if (world == null) return null;
@@ -216,7 +253,8 @@ public final class CartographerPeripheral implements Peripheral {
             public LuaValue call() {
                 World world = location.getWorld();
                 if (world == null) return LuaValue.NIL;
-                return LuaString.valueOf(world.getBiome(location).getKey().getKey().toUpperCase(Locale.ROOT));
+                String biome = SyncDispatcher.sync(plugin, () -> world.getBiome(location).getKey().getKey().toUpperCase(Locale.ROOT));
+                return LuaString.valueOf(biome);
             }
         });
 
@@ -247,6 +285,7 @@ public final class CartographerPeripheral implements Peripheral {
                             pt.set("x", LuaInteger.valueOf(x));
                             pt.set("y", LuaInteger.valueOf(highestY));
                             pt.set("z", LuaInteger.valueOf(z));
+                            ScannerPeripheral.setOffset(pt, dx, highestY - location.getBlockY(), dz);
                             pt.set("material", LuaString.valueOf(topBlock.getType().name()));
                             grid.set(idx++, pt);
                         }
@@ -268,6 +307,9 @@ public final class CartographerPeripheral implements Peripheral {
                     World world = location.getWorld();
                     if (world == null) {
                         return varargsOf(LuaBoolean.FALSE, LuaString.valueOf("World not available"));
+                    }
+                    if (!consumeBlankMap()) {
+                        return varargsOf(LuaBoolean.FALSE, LuaString.valueOf("Needs an empty map or paper in an adjacent container"));
                     }
 
                     MapView view = Bukkit.createMap(world);
@@ -399,10 +441,13 @@ public final class CartographerPeripheral implements Peripheral {
                 BlockFace face = TransposerPeripheral.parseFace(sideStr);
 
                 return SyncDispatcher.sync(plugin, () -> {
-                    Block rel = location.getBlock().getRelative(face);
                     World world = location.getWorld();
                     if (world == null) {
                         return varargsOf(LuaBoolean.FALSE, LuaString.valueOf("World not loaded"));
+                    }
+                    Block rel = location.getBlock().getRelative(face);
+                    if (rel.getType() != monitorMaterial()) {
+                        return varargsOf(LuaBoolean.FALSE, LuaString.valueOf("No monitor on side " + sideStr));
                     }
 
                     MonitorPeripheral monitor = new MonitorPeripheral(plugin, rel.getLocation());

@@ -72,4 +72,23 @@ class MonitorPeripheralTest {
         assertEquals(3, table.get("getLineCount").call().toint());
         assertEquals("Beta", table.get("getLine").call(LuaValue.valueOf(2)).tojstring());
     }
+
+    @Test
+    @DisplayName("Monitor caps line count and line length")
+    void testLimits() {
+        LuaValue table = monitor.toLuaTable();
+
+        assertThrows(org.luaj.vm2.LuaError.class,
+                () -> table.get("setLine").call(LuaValue.valueOf(Integer.MAX_VALUE), LuaValue.valueOf("x")));
+        assertEquals(0, table.get("getLineCount").call().toint());
+
+        for (int i = 1; i <= MonitorPeripheral.MAX_LINES + 5; i++) {
+            table.get("write").call(LuaValue.valueOf("line " + i));
+        }
+        assertEquals(MonitorPeripheral.MAX_LINES, table.get("getLineCount").call().toint());
+        assertEquals("line 6", table.get("getLine").call(LuaValue.valueOf(1)).tojstring());
+
+        table.get("setText").call(LuaValue.valueOf("a".repeat(1000)));
+        assertEquals(MonitorPeripheral.MAX_LINE_LENGTH, table.get("getLine").call(LuaValue.valueOf(1)).tojstring().length());
+    }
 }

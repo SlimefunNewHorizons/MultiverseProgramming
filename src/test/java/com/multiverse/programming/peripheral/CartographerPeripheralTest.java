@@ -77,6 +77,52 @@ class CartographerPeripheralTest {
     }
 
     @Test
+    @DisplayName("createMap fails without an empty map or paper nearby")
+    void testCreateMapNeedsBlank() {
+        Block self = mock(Block.class);
+        when(world.getBlockAt(any(Location.class))).thenReturn(self);
+
+        LuaTable table = cartographer.toLuaTable().checktable();
+        org.luaj.vm2.Varargs res = table.get("createMap").invoke(LuaValue.NONE);
+        assertFalse(res.arg1().toboolean());
+    }
+
+    @Test
+    @DisplayName("consumeBlankMap takes one paper from an adjacent container")
+    void testConsumeBlankMap() {
+        Block self = mock(Block.class);
+        when(world.getBlockAt(any(Location.class))).thenReturn(self);
+        Block chestBlock = mock(Block.class);
+        when(self.getRelative(org.bukkit.block.BlockFace.NORTH)).thenReturn(chestBlock);
+        org.bukkit.block.Chest chest = mock(org.bukkit.block.Chest.class);
+        when(chestBlock.getState()).thenReturn(chest);
+        org.bukkit.inventory.Inventory inv = mock(org.bukkit.inventory.Inventory.class);
+        when(chest.getInventory()).thenReturn(inv);
+        when(inv.first(Material.MAP)).thenReturn(-1);
+        when(inv.first(Material.PAPER)).thenReturn(3);
+        org.bukkit.inventory.ItemStack paper = mock(org.bukkit.inventory.ItemStack.class);
+        when(paper.getAmount()).thenReturn(5);
+        when(inv.getItem(3)).thenReturn(paper);
+
+        assertTrue(cartographer.consumeBlankMap());
+        verify(paper).setAmount(4);
+        verify(inv).setItem(3, paper);
+    }
+
+    @Test
+    @DisplayName("renderToMonitor refuses a side without a monitor block")
+    void testRenderToMonitorNeedsMonitor() {
+        Block self = mock(Block.class);
+        when(world.getBlockAt(any(Location.class))).thenReturn(self);
+        Block stone = mock(Block.class);
+        when(stone.getType()).thenReturn(Material.STONE);
+        when(self.getRelative(org.bukkit.block.BlockFace.NORTH)).thenReturn(stone);
+
+        LuaTable table = cartographer.toLuaTable().checktable();
+        assertFalse(table.get("renderToMonitor").call(LuaValue.valueOf("north")).toboolean());
+    }
+
+    @Test
     @DisplayName("setHologram, project, and clear functions succeed")
     void testHologramAndClear() {
         when(world.getHighestBlockYAt(anyInt(), anyInt())).thenReturn(64);

@@ -26,7 +26,7 @@ Welcome to the internal technical documentation of **MultiverseProgramming**. Th
    - Turtle state machine, inventory mechanics & fuel accumulator
    - Lateral Quarry Engine upgrade: physical lockstep attachment, dual holographic chests & auto-pause
    - Peripheral discovery (`PeripheralManager`) and deep dive into the 9 custom peripherals
-   - Claim protection integrations (WorldGuard, GriefPrevention, Towny, Lands, Residence)
+   - Claim protection integrations (WorldGuard, ProtectionStones, BentoBox)
    - CoreProtect audit logging bridge (`CoreProtectBridge`)
 
 ---

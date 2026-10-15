@@ -114,15 +114,17 @@ Al ejecutarse un programa, `PeripheralManager.bindAll(globals, plugin, location,
 
 | Periférico | Bloque | Variable Lua | Funciones Clave |
 | :--- | :--- | :--- | :--- |
-| **Monitor** | Carteles y Carteles Colgantes | `monitor` | `write(text)`, `setCursor(x,y)`, `clear()`, `renderBanner(ascii)` |
-| **Crafter** | `CRAFTER` | `crafter` | `craft()`, `canCraft()`, `getRecipe()`, `inspectGrid()` |
-| **Transposer** | `HOPPER` | `transposer` | `transferItem(fromDir, toDir, slot, count)`, `getInventorySize()` |
-| **Speaker** | `NOTE_BLOCK` | `speaker` | `playNote(instrument, pitch)`, `playTone(freq)`, `playSound(snd)` |
-| **Scanner** | `OBSERVER` | `scanner` | `scanEntities(radius)`, `scanPlayers(radius)`, `scanBlocks(radius, mat)` |
-| **Cartographer** | `CARTOGRAPHY_TABLE` | `cartographer` | `getBiome()`, `createMap(scale)`, `renderToMonitor(side, scale)` |
+| **Monitor** | `OCHRE_FROGLIGHT` | `monitor` | `write(text)`, `setText(text)`, `setLine(n, text)`, `getLine(n)`, `getText()`, `getLineCount()`, `clear()` (máx. 20 líneas x 256 caracteres) |
+| **Crafter** | `CRAFTER` | `crafter` | `craft()`, `getItems()`, `isCrafting()`, `isSlotDisabled(slot)`, `setSlotDisabled(slot, bool)` |
+| **Transposer** | `HOPPER` | `transposer` | `getDirections()`, `getSlotCount(dir)`, `getItem(dir, slot)`, `getAllItems(dir)`, `transferItem(fromDir, toDir, fromSlot, [count], [toSlot])`, `compareItems(...)` |
+| **Speaker** | `NOTE_BLOCK` | `speaker` | `playNote(instrument, note)`, `playTone(freqHz)`, `playSound(name, [volume], [pitch])` |
+| **Scanner** | `OBSERVER` | `scanner` | `scanEntities(radius)`, `scanPlayers(radius)`, `scanBlocks(radius, mat)`, `inspect(dx, dy, dz)` |
+| **Cartographer** | `CARTOGRAPHY_TABLE` | `cartographer` | `getBiome()`, `scanTopography(radius)`, `createMap(scale)`, `project(radius)`, `renderToMonitor(side, radius)`, `setHologram(text)`, `clear([side])` |
 | **Alchemist** | `BREWING_STAND` | `alchemist` | `brew(type, [modifier], [splash])`, `getRecipes()`, `inspectStand()` |
-| **Farmer** | `COMPOSTER` | `farmer` | `inspectCrop(dir)`, `harvest(dir)`, `replant(dir)`, `fertilize(dir)` |
-| **NPC** | `SCULK_CATALYST` | `npc` | `say(msg)`, `ask(jugador, pregunta, opciones)`, `setName(name)`, `getLastResponse()` |
+| **Farmer** | `COMPOSTER` | `farmer` | `inspectCrop(lado o dx, dy, dz)`, `harvest(lado o dx, dy, dz, [replant])`, `harvestArea(radius, [replant])`, `fertilize(lado o dx, dy, dz)` |
+| **NPC** | `SCULK_CATALYST` | `npc` | `setName(name)`, `spawn([tipo])`, `say([jugador], msg)`, `ask([jugador], pregunta, opciones)`, `getLastResponse([jugador])`, `setHologram(texto)`, `despawn()` |
+
+Los materiales son los valores por defecto y se pueden cambiar en `config.yml`. Las posiciones `dx, dy, dz` son desplazamientos desde el bloque del periférico; los resultados de escaneo devuelven tanto `x, y, z` absolutos como `dx, dy, dz`.
 
 > [!NOTE]
 > El **Motor de Cantera** (`BLAST_FURNACE`) **no** es un periférico de computadora. Como se detalla en la [Sección 2](#2-módulo-de-mejora-lateral-de-cantera-quarry-engine), opera de forma exclusiva como una mejora de acoplamiento lateral para la Tortuga Programable controlada a través de `turtle.quarry(...)`.
@@ -132,13 +134,17 @@ Al ejecutarse un programa, `PeripheralManager.bindAll(globals, plugin, location,
 ## 4. Integraciones de Auditoría y Protección de Reclamos
 
 ### Protección de Terrenos (`ProtectionManager.java`)
-Antes de que una Tortuga coloque o rompa un bloque en el mundo, `ProtectionManager.checkBuildArea()` consulta a los plugins de protección activos:
-- **WorldGuard**: Valida la bandera `BUILD` y membresía de región mediante `WorldGuardPlugin.inst().createProtectionQuery()`.
-- **GriefPrevention**: Verifica la confianza del reclamo con `GriefPrevention.instance.dataStore.getClaimAt()`.
-- **Towny**: Verifica permisos de construcción en parcelas municipales.
-- **Lands** y **Residence**: Verifica banderas del reclamo para el UUID del propietario de la tortuga.
+`ProtectionManager` consulta por reflexión a los plugins de protección activos, en nombre del dueño de la tortuga:
+- `canBuildAt(dueño, ubicación)`: cada `dig`, `place` y movimiento de un bloque.
+- `checkBuildArea(dueño, origen, blueprint)`: todo el volumen antes de construir un blueprint.
+- `checkRegionArea(dueño, min, max)`: la zona de excavación antes de iniciar una cantera.
 
-Si el terreno está protegido, la Tortuga se detiene inmediatamente con un mensaje de error y no modifica el mundo.
+Plugins soportados:
+- **WorldGuard**: Valida la bandera `BUILD` y la membresía de la región (opción: `worldguard-protection-check`).
+- **ProtectionStones**: Valida la membresía de la región, o la propiedad con `protection-stones-require-owner: true`.
+- **BentoBox**: Valida la membresía de la isla.
+
+Los administradores (`multiverseprogramming.admin`) omiten estas comprobaciones. Si el destino está protegido, la acción falla (devuelve `false` o detiene la tarea con un mensaje de error) y el mundo no se modifica.
 
 ### Auditoría con CoreProtect (`CoreProtectBridge.java`)
 Todas las acciones de colocación y eliminación de bloques realizadas por Tortugas, Computadoras y Canteras se registran en CoreProtect:

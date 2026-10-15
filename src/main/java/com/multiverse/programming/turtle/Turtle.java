@@ -498,6 +498,9 @@ public final class Turtle {
             if (!canSafelyOccupy(targetBlock)) {
                 return false; // Obstacle or delicate block (redstone, crops, torch, etc.)
             }
+            if (!canOwnerModify(targetBlock)) {
+                return false;
+            }
 
             if (quarryLateralSide != null) {
                 BlockFace lateralFace = getLateralFace(facing, quarryLateralSide);
@@ -593,8 +596,20 @@ public final class Turtle {
                 notifyOwner("§c[Turtle " + id + "] Out of fuel: cannot dig.");
                 return false;
             }
+            if (!canOwnerModify(target)) {
+                return false;
+            }
 
-            Collection<ItemStack> drops = target.getDrops();
+            List<ItemStack> drops = new ArrayList<>(target.getDrops());
+            // setType(AIR) deletes container contents without dropping them; shulker drops already carry theirs.
+            if (target.getState() instanceof org.bukkit.block.Container container
+                    && !(container instanceof org.bukkit.block.ShulkerBox)) {
+                for (ItemStack content : container.getSnapshotInventory().getContents()) {
+                    if (content != null && !content.getType().isAir()) {
+                        drops.add(content);
+                    }
+                }
+            }
             Material oldMat = target.getType();
             BlockData oldData = target.getBlockData();
             Location targetLoc = target.getLocation();
@@ -642,6 +657,14 @@ public final class Turtle {
             if (stack == null || stack.getAmount() <= 0 || !stack.getType().isBlock() || isIllegalBlock(stack.getType())) {
                 return false;
             }
+            // setType places an empty block: a filled shulker box (or any item carrying block-entity data) would lose its contents.
+            if (stack.hasItemMeta() && stack.getItemMeta() instanceof org.bukkit.inventory.meta.BlockStateMeta bsm && bsm.hasBlockState()) {
+                notifyOwner("§c[Turtle " + id + "] Cannot place " + stack.getType().name() + ": it holds stored contents.");
+                return false;
+            }
+            if (!canOwnerModify(target)) {
+                return false;
+            }
 
             target.setType(stack.getType(), true);
             CoreProtectBridge.logPlacement(owner, id, target.getLocation(), stack.getType(), target.getBlockData());
@@ -654,6 +677,19 @@ public final class Turtle {
             }
             return true;
         });
+    }
+
+    /**
+     * Claim check (WorldGuard / ProtectionStones / BentoBox) for single-block dig, place and move,
+     * evaluated as the turtle's owner.
+     */
+    private boolean canOwnerModify(Block target) {
+        if (plugin instanceof MultiverseProgrammingPlugin mvp && mvp.getProtectionManager() != null
+                && !mvp.getProtectionManager().canBuildAt(owner, target.getLocation())) {
+            notifyOwner("§c[Turtle " + id + "] Blocked: target is inside a protected area.");
+            return false;
+        }
+        return true;
     }
 
     public synchronized ItemStack addToInventory(ItemStack item) {

@@ -41,7 +41,12 @@ public final class NpcPeripheral implements Peripheral {
     private final JavaPlugin plugin;
     private final Location location;
 
-    private String npcName = "§b[NPC]";
+    // Bosses keep boss bars / area effects even with AI off; never spawnable from Lua.
+    private static final java.util.Set<EntityType> BLOCKED_TYPES =
+            java.util.EnumSet.of(EntityType.ENDER_DRAGON, EntityType.WITHER, EntityType.ELDER_GUARDIAN);
+
+    private volatile String npcName = "§b[NPC]";
+    private volatile EntityType npcType = EntityType.VILLAGER;
     private Entity npcEntity;
     private Entity hologramEntity;
     private final Map<String, String> playerResponses = new ConcurrentHashMap<>();
@@ -55,18 +60,41 @@ public final class NpcPeripheral implements Peripheral {
     public static boolean hasNpcAt(Location loc) {
         if (loc == null || loc.getWorld() == null) return false;
         for (NpcPeripheral npc : ACTIVE_NPCS) {
-            Location nLoc = npc.getLocation();
-            if (nLoc != null && nLoc.getWorld() != null && nLoc.getWorld().equals(loc.getWorld())
-                    && nLoc.getBlockX() == loc.getBlockX() && nLoc.getBlockY() == loc.getBlockY() && nLoc.getBlockZ() == loc.getBlockZ()) {
+            if (isSameBlock(npc.getLocation(), loc)) {
                 return true;
             }
         }
         return false;
     }
 
+    private static boolean isSameBlock(Location a, Location b) {
+        return a != null && b != null && a.getWorld() != null && a.getWorld().equals(b.getWorld())
+                && a.getBlockX() == b.getBlockX() && a.getBlockY() == b.getBlockY() && a.getBlockZ() == b.getBlockZ();
+    }
+
+    /**
+     * Resolves a Lua-supplied entity type name to a safe NPC type: living, spawnable and not a boss.
+     * Anything else (TNT, end crystals, lightning, unknown names) falls back to VILLAGER.
+     */
+    static EntityType resolveNpcType(String typeName) {
+        if (typeName == null || typeName.isBlank()) return EntityType.VILLAGER;
+        EntityType type;
+        try {
+            type = EntityType.valueOf(typeName.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return EntityType.VILLAGER;
+        }
+        if (!type.isAlive() || !type.isSpawnable() || BLOCKED_TYPES.contains(type)) {
+            return EntityType.VILLAGER;
+        }
+        return type;
+    }
+
     public NpcPeripheral(JavaPlugin plugin, Location location) {
         this.plugin = plugin;
         this.location = location;
+        // One registered NPC per block: each program run builds a new peripheral instance.
+        ACTIVE_NPCS.removeIf(n -> isSameBlock(n.getLocation(), location));
         ACTIVE_NPCS.add(this);
     }
 
@@ -93,19 +121,8 @@ public final class NpcPeripheral implements Peripheral {
 
         Location spawnLoc = location.clone().add(0.5, 1.0, 0.5);
 
-        EntityType type = EntityType.VILLAGER;
-        if (typeName != null && !typeName.isBlank()) {
-            try {
-                type = EntityType.valueOf(typeName.trim().toUpperCase(Locale.ROOT));
-            } catch (IllegalArgumentException ignored) {
-                for (EntityType et : EntityType.values()) {
-                    if (et.name().equalsIgnoreCase(typeName.trim())) {
-                        type = et;
-                        break;
-                    }
-                }
-            }
-        }
+        EntityType type = resolveNpcType(typeName);
+        npcType = type;
 
         try {
             Entity entity = world.spawnEntity(spawnLoc, type);
@@ -307,6 +324,7 @@ public final class NpcPeripheral implements Peripheral {
     public static void cleanupAt(Location loc) {
         cleanupEntitiesAt(loc);
         cleanupHologramsAt(loc);
+        ACTIVE_NPCS.removeIf(n -> isSameBlock(n.getLocation(), loc));
     }
 
     @Override
@@ -324,7 +342,7 @@ public final class NpcPeripheral implements Peripheral {
                         npcEntity.setCustomName(npcName);
                         npcEntity.setCustomNameVisible(hologramEntity == null || !hologramEntity.isValid());
                     } else if (spawn) {
-                        spawnNpc("VILLAGER");
+                        spawnNpc(npcType.name());
                     }
                     return null;
                 });
@@ -385,7 +403,8 @@ public final class NpcPeripheral implements Peripheral {
         table.set("isSpawned", new ZeroArgFunction() {
             @Override
             public LuaValue call() {
-                return LuaBoolean.valueOf(npcEntity != null && npcEntity.isValid());
+                boolean spawned = SyncDispatcher.sync(plugin, () -> npcEntity != null && npcEntity.isValid());
+                return LuaBoolean.valueOf(spawned);
             }
         });
         table.set("hasSpawned", table.get("isSpawned"));
@@ -395,8 +414,11 @@ public final class NpcPeripheral implements Peripheral {
             @Override
             public Varargs invoke(Varargs args) {
                 double radius = args.narg() >= 1 ? args.checkdouble(1) : 16.0;
-                Player p = getNearestPlayer(radius);
-                return p != null ? LuaString.valueOf(p.getName()) : LuaValue.NIL;
+                String name = SyncDispatcher.sync(plugin, () -> {
+                    Player p = getNearestPlayer(radius);
+                    return p != null ? p.getName() : null;
+                });
+                return name != null ? LuaString.valueOf(name) : LuaValue.NIL;
             }
         });
 

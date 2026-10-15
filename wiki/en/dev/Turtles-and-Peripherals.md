@@ -114,15 +114,17 @@ When a program runs, `PeripheralManager.bindAll(globals, plugin, location, isTur
 
 | Peripheral | Block Material | Lua Variable | Core Functions |
 | :--- | :--- | :--- | :--- |
-| **Monitor** | Any Sign / Hanging Sign | `monitor` | `write(text)`, `setCursor(x,y)`, `clear()`, `renderBanner(ascii)` |
-| **Crafter** | `CRAFTER` | `crafter` | `craft()`, `canCraft()`, `getRecipe()`, `inspectGrid()` |
-| **Transposer** | `HOPPER` | `transposer` | `transferItem(fromDir, toDir, slot, count)`, `getInventorySize()` |
-| **Speaker** | `NOTE_BLOCK` | `speaker` | `playNote(instrument, pitch)`, `playTone(freq)`, `playSound(snd)` |
-| **Scanner** | `OBSERVER` | `scanner` | `scanEntities(radius)`, `scanPlayers(radius)`, `scanBlocks(radius, mat)` |
-| **Cartographer** | `CARTOGRAPHY_TABLE` | `cartographer` | `getBiome()`, `createMap(scale)`, `renderToMonitor(side, scale)` |
+| **Monitor** | `OCHRE_FROGLIGHT` | `monitor` | `write(text)`, `setText(text)`, `setLine(n, text)`, `getLine(n)`, `getText()`, `getLineCount()`, `clear()` (max 20 lines x 256 chars) |
+| **Crafter** | `CRAFTER` | `crafter` | `craft()`, `getItems()`, `isCrafting()`, `isSlotDisabled(slot)`, `setSlotDisabled(slot, bool)` |
+| **Transposer** | `HOPPER` | `transposer` | `getDirections()`, `getSlotCount(dir)`, `getItem(dir, slot)`, `getAllItems(dir)`, `transferItem(fromDir, toDir, fromSlot, [count], [toSlot])`, `compareItems(...)` |
+| **Speaker** | `NOTE_BLOCK` | `speaker` | `playNote(instrument, note)`, `playTone(freqHz)`, `playSound(name, [volume], [pitch])` |
+| **Scanner** | `OBSERVER` | `scanner` | `scanEntities(radius)`, `scanPlayers(radius)`, `scanBlocks(radius, mat)`, `inspect(dx, dy, dz)` |
+| **Cartographer** | `CARTOGRAPHY_TABLE` | `cartographer` | `getBiome()`, `scanTopography(radius)`, `createMap(scale)`, `project(radius)`, `renderToMonitor(side, radius)`, `setHologram(text)`, `clear([side])` |
 | **Alchemist** | `BREWING_STAND` | `alchemist` | `brew(type, [modifier], [splash])`, `getRecipes()`, `inspectStand()` |
-| **Farmer** | `COMPOSTER` | `farmer` | `inspectCrop(dir)`, `harvest(dir)`, `replant(dir)`, `fertilize(dir)` |
-| **NPC** | `SCULK_CATALYST` | `npc` | `say(msg)`, `ask(player, question, options)`, `setName(name)`, `getLastResponse()` |
+| **Farmer** | `COMPOSTER` | `farmer` | `inspectCrop(side or dx, dy, dz)`, `harvest(side or dx, dy, dz, [replant])`, `harvestArea(radius, [replant])`, `fertilize(side or dx, dy, dz)` |
+| **NPC** | `SCULK_CATALYST` | `npc` | `setName(name)`, `spawn([type])`, `say([player], msg)`, `ask([player], question, options)`, `getLastResponse([player])`, `setHologram(text)`, `despawn()` |
+
+Block materials are the defaults and can be changed in `config.yml`. Positions passed as `dx, dy, dz` are offsets from the peripheral block; scan results return both absolute `x, y, z` and `dx, dy, dz`.
 
 > [!NOTE]
 > The **Quarry Engine** (`BLAST_FURNACE`) is **not** a computer peripheral. As detailed in [Section 2](#2-quarry-engine-lateral-upgrade-module), it is exclusively an autonomous lateral upgrade for the Programmable Turtle operated via `turtle.quarry(...)`.
@@ -132,13 +134,17 @@ When a program runs, `PeripheralManager.bindAll(globals, plugin, location, isTur
 ## 4. Protection & Audit Logging Integrations
 
 ### Claim Protections (`ProtectionManager.java`)
-Before a Turtle places or destroys a block in the world, `ProtectionManager.checkBuildArea()` queries active region protection plugins:
-- **WorldGuard**: Checks `Flags.BUILD` and region ownership via `WorldGuardPlugin.inst().createProtectionQuery()`.
-- **GriefPrevention**: Checks claim trust via `GriefPrevention.instance.dataStore.getClaimAt()`.
-- **Towny**: Verifies town plot build permissions.
-- **Lands** & **Residence**: Verifies land flags for the turtle owner's UUID.
+`ProtectionManager` queries active region protection plugins by reflection, as the turtle's owner:
+- `canBuildAt(owner, location)`: every single-block `dig`, `place` and movement.
+- `checkBuildArea(owner, origin, blueprint)`: the whole volume before a blueprint build.
+- `checkRegionArea(owner, min, max)`: the excavation box before a quarry starts.
 
-If the area is protected, the Turtle immediately halts with an error message and does not alter the world.
+Supported plugins:
+- **WorldGuard**: Checks the `BUILD` flag and region membership (toggle: `worldguard-protection-check`).
+- **ProtectionStones**: Checks region membership, or ownership with `protection-stones-require-owner: true`.
+- **BentoBox**: Checks island membership.
+
+Admins (`multiverseprogramming.admin`) bypass these checks. If the target is protected, the action fails (returns `false` or halts the task with an error message) and the world is not altered.
 
 ### CoreProtect Audit Bridge (`CoreProtectBridge.java`)
 All block removals and block placements by Turtles, Computers, and Quarries are logged to CoreProtect:

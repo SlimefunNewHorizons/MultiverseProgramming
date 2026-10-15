@@ -7,6 +7,7 @@ import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.luaj.vm2.LuaError;
 import org.luaj.vm2.LuaTable;
 import org.luaj.vm2.LuaValue;
 import org.luaj.vm2.Varargs;
@@ -26,6 +27,9 @@ import java.util.List;
 public final class MonitorPeripheral implements Peripheral {
 
     public static final String SCOREBOARD_TAG = "multiverse_monitor";
+    // Caps keep the TextDisplay packet small and stop setLine(huge) from exhausting memory.
+    public static final int MAX_LINES = 20;
+    public static final int MAX_LINE_LENGTH = 256;
     private final JavaPlugin plugin;
     private final Location location;
     private final List<String> lines = new ArrayList<>();
@@ -113,11 +117,16 @@ public final class MonitorPeripheral implements Peripheral {
         return false;
     }
 
+    private static String clip(String line) {
+        return line.length() > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) : line;
+    }
+
     public void setText(String text) {
         lines.clear();
         if (text != null && !text.isEmpty()) {
             for (String l : text.split("\n")) {
-                lines.add(l);
+                if (lines.size() >= MAX_LINES) break;
+                lines.add(clip(l));
             }
         }
         updateWorldDisplay();
@@ -137,7 +146,11 @@ public final class MonitorPeripheral implements Peripheral {
             @Override
             public LuaValue call(LuaValue arg) {
                 String str = arg.tojstring();
-                lines.add(str);
+                // Scroll: drop the oldest line once the screen is full.
+                if (lines.size() >= MAX_LINES) {
+                    lines.remove(0);
+                }
+                lines.add(clip(str));
                 updateWorldDisplay();
                 return LuaValue.NONE;
             }
@@ -169,10 +182,13 @@ public final class MonitorPeripheral implements Peripheral {
                 if (lineNum <= 0) {
                     return LuaValue.NONE;
                 }
+                if (lineNum > MAX_LINES) {
+                    throw new LuaError("line " + lineNum + " out of range (monitor has " + MAX_LINES + " lines)");
+                }
                 while (lines.size() < lineNum) {
                     lines.add("");
                 }
-                lines.set(lineNum - 1, text);
+                lines.set(lineNum - 1, clip(text));
                 updateWorldDisplay();
                 return LuaValue.NONE;
             }

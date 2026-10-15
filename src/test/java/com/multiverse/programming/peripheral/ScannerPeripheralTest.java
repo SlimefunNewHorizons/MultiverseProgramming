@@ -82,6 +82,34 @@ class ScannerPeripheralTest {
     }
 
     @Test
+    @DisplayName("inspect rejects far targets and skips unloaded chunks")
+    void testInspectLimits() {
+        when(world.getMinHeight()).thenReturn(-64);
+        when(world.getMaxHeight()).thenReturn(320);
+        LuaTable table = scanner.toLuaTable().checktable();
+        LuaValue inspect = table.get("inspect");
+
+        assertThrows(org.luaj.vm2.LuaError.class,
+                () -> inspect.call(LuaValue.valueOf(10_000_000), LuaValue.valueOf(64), LuaValue.valueOf(10)));
+
+        when(world.isChunkLoaded(anyInt(), anyInt())).thenReturn(false);
+        assertTrue(inspect.call(LuaValue.valueOf(2), LuaValue.valueOf(0), LuaValue.valueOf(0)).isnil());
+        verify(world, never()).getBlockAt(anyInt(), anyInt(), anyInt());
+
+        Block stone = mock(Block.class);
+        when(stone.getType()).thenReturn(Material.STONE);
+        org.bukkit.block.data.BlockData data = mock(org.bukkit.block.data.BlockData.class);
+        when(data.getAsString()).thenReturn("minecraft:stone");
+        when(stone.getBlockData()).thenReturn(data);
+        when(world.getBlockAt(12, 64, 10)).thenReturn(stone);
+        when(world.isChunkLoaded(anyInt(), anyInt())).thenReturn(true);
+        LuaValue info = inspect.call(LuaValue.valueOf(2), LuaValue.valueOf(0), LuaValue.valueOf(0));
+        assertEquals("STONE", info.get("material").tojstring());
+        assertEquals(12, info.get("x").toint());
+        assertEquals(2, info.get("dx").toint());
+    }
+
+    @Test
     @DisplayName("scanBlocks filters by material")
     void testScanBlocks() {
         when(world.getMinHeight()).thenReturn(-64);

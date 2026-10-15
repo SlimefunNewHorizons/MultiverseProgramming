@@ -64,7 +64,7 @@ Supports **Minecraft 1.21.11, 26.1 and 26.2** on **Paper / Purpur** with a singl
 - **Machine Crafting & Functionality Toggles**: Granular toggles in `config.yml` to enable/disable crafting recipes and runtime functionality for each machine block.
 
 ### 🔌 Advanced Automation Peripherals & Machines
-- **Display Monitor** (`monitor`): Render multiline text, ASCII banners, and RGB colors on adjacent sign monitors.
+- **Display Monitor** (`monitor`): Render up to 20 lines of floating text (with `&` color codes) above an adjacent monitor block.
 - **Auto-Crafter** (`crafter`): Programmatic 3x3 recipe crafting, ingredient validation, and recipe querying.
 - **Inventory Transposer** (`transposer`): Automated item routing, precise stack transfer, and container sorting between adjacent chests.
 - **Sound Synthesizer** (`speaker`): Play custom note block melodies, instruments, tones, and octaves directly via Lua.

@@ -44,6 +44,8 @@ monitor.setLine(2, "&eCPU: &cALERT")
 local text = monitor.getText()
 ```
 
+A monitor holds at most 20 lines of 256 characters. `write` scrolls (drops the oldest line) when full; `setLine` above 20 raises an error.
+
 ### 2. Auto-Crafter (`crafter`)
 
 Interfaces with the Minecraft 1.21 **Crafter** block for automated recipe manufacturing.
@@ -61,6 +63,8 @@ if success then
   print("&aItem crafted and dispensed!")
 end
 ```
+
+`craft()` uses the real recipe: remainders such as empty buckets stay in the grid, and special recipes (dyes, shulker recolor, book copies) keep item data.
 
 ### 3. Inventory Transposer (`transposer`)
 
@@ -80,6 +84,8 @@ local moved = transposer.transferItem("north", "south", 1, 16)
 print("Moved: " .. moved)
 ```
 
+Transfers follow vanilla rules: shulker boxes cannot go inside shulker boxes. Each transfer fires `InventoryMoveItemEvent`, so container-lock plugins can block it (it returns `0`).
+
 ### 4. Sound Synthesizer (`speaker`)
 
 Plays musical notes across 2 octaves, raw audio frequencies in Hz, and Minecraft sound effects.
@@ -89,10 +95,10 @@ speaker.playNote("harp", 12)
 sleep(0.2)
 speaker.playNote("bell", 16)
 
--- Play frequency in Hz (A4 = 440 Hz)
+-- Play frequency in Hz (playable range 185-740 Hz; 370 Hz = F#4 = native pitch)
 speaker.playTone(440.0)
 
--- Play vanilla sound effects
+-- Play vanilla sound effects: playSound(name, [volume 0-3], [pitch 0.5-2])
 speaker.playSound("entity.player.levelup", 1.0, 1.2)
 ```
 
@@ -118,7 +124,17 @@ local ores = scanner.scanBlocks(8, "DIAMOND")
 for i, b in ipairs(ores) do
   print(b.material .. " at [" .. b.x .. ", " .. b.y .. ", " .. b.z .. "]")
 end
+
+-- Inspect one block by offset from the scanner (dx, dy, dz; max 16 blocks).
+-- Scan results include dx/dy/dz too, so they can be passed straight in.
+-- Returns nil if the chunk is not loaded.
+local block = scanner.inspect(ores[1].dx, ores[1].dy, ores[1].dz)
+if block then
+  print("Material: " .. block.material .. " Data: " .. block.blockData)
+end
 ```
+
+Positions in results always include absolute world coordinates (`x`, `y`, `z`) and the offset from the scanner (`dx`, `dy`, `dz`).
 
 ### 6. Cartographer & Map Renderer (`cartographer`)
 
@@ -136,6 +152,7 @@ if ok then
 end
 
 -- Generate a vanilla filled map item (scale 0 to 4)
+-- Consumes one empty map (or paper) from an adjacent container
 local success, mapId = cartographer.createMap(1)
 if success then
   print("Map #" .. mapId .. " created in adjacent container!")
@@ -158,7 +175,9 @@ local stand = alchemist.inspectStand()
 print("Fuel level: " .. stand.fuelLevel)
 
 -- Synthesize a potion: alchemist.brew(potionType, [modifier], [isSplash])
--- Modifiers: "normal", "extended" (Redstone), "strong" (Glowstone)
+-- Base: a plain Water Bottle (other potions are never consumed)
+-- Modifiers: "normal", "extended" (Redstone -> LONG_ variant), "strong" (Glowstone -> STRONG_ variant)
+-- Fails if the potion has no such variant, or if both modifiers are given
 local ok, msg = alchemist.brew("SPEED", "extended", false)
 if ok then
   print("&a" .. msg)
@@ -172,7 +191,7 @@ end
 Inspects crop maturity, automatically harvests mature crops, replants seeds, and fertilizes crops using bone meal from adjacent chests.
 
 ```lua
--- Inspect crop maturity (by coordinates or relative side)
+-- Inspect crop maturity (by side, or by offset dx, dy, dz from the farmer)
 local crop = farmer.inspectCrop("down")
 if crop.isCrop then
   print("Crop: " .. crop.material .. " Mature: " .. tostring(crop.mature))
@@ -180,6 +199,9 @@ end
 
 -- Harvest a single crop (replant = true)
 local harvested = farmer.harvest("down", true)
+
+-- Harvest by offset: 1 block down, 3 blocks south (max 12 blocks on each axis)
+farmer.harvest(0, -1, 3, true)
 
 -- Harvest entire area (radius up to 12) with auto-replant
 local count = farmer.harvestArea(4, true)
@@ -196,6 +218,10 @@ Enables interactive dialogues, floating TextDisplay holograms, chat choice promp
 ```lua
 -- Set floating hologram nameplate
 npc.setName("&6[Grand Wizard]")
+
+-- Spawn as another mob: only living, spawnable, non-boss mobs are accepted
+-- (anything else, e.g. "TNT" or "ENDER_DRAGON", falls back to VILLAGER)
+npc.spawn("ZOMBIE")
 
 -- Send dialogue message to specific player
 npc.say("Steve", "Welcome to the enchanted academy!")
@@ -264,6 +290,10 @@ turtle.place()      -- Places block from selected slot in front
 turtle.placeUp()    -- Places block above
 turtle.placeDown()  -- Places block below
 ```
+
+- Digging, placing and moving respect claims (WorldGuard, ProtectionStones, BentoBox) as the turtle's owner. Inside a claim the owner cannot build in, the action returns `false`.
+- Digging a container (chest, barrel...) collects its contents into the turtle inventory.
+- `place` refuses items that hold stored contents, such as a filled shulker box, so they are not emptied.
 
 ### Inventory & Fuel
 
@@ -358,6 +388,7 @@ Placed turtles automatically remember the **Player UUID** of the player who plac
 
 #### Protection & Anti-Griefing
 - **Anti-Break Protection:** Only the owning player or a server administrator (`multiverseprogramming.admin`) can break/disassemble placed turtles.
+- **Claim Protection:** `dig`, `place` and movement are checked against WorldGuard, ProtectionStones and BentoBox for the turtle's owner. Turtles without an owner cannot modify claimed land.
 - **Inventory & Disk Drops:** When broken by the owner or an admin, all 16 inventory items and the inserted disk are dropped safely on the ground.
 
 #### Halting Tasks & Construction (`/mvprog stop`)

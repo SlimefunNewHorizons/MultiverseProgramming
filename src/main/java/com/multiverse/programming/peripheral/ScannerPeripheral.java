@@ -11,6 +11,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.luaj.vm2.LuaBoolean;
 import org.luaj.vm2.LuaDouble;
+import org.luaj.vm2.LuaError;
 import org.luaj.vm2.LuaInteger;
 import org.luaj.vm2.LuaString;
 import org.luaj.vm2.LuaTable;
@@ -25,6 +26,8 @@ import java.util.Locale;
  * Peripheral that scans nearby entities, players, and blocks in a configurable radius.
  */
 public final class ScannerPeripheral implements Peripheral {
+
+    static final int INSPECT_RANGE = 16;
 
     private final JavaPlugin plugin;
     private final Location location;
@@ -42,6 +45,18 @@ public final class ScannerPeripheral implements Peripheral {
     @Override
     public Location getLocation() {
         return location;
+    }
+
+    // Results carry absolute x/y/z plus dx/dy/dz relative to the scanner block, ready for inspect(dx, dy, dz).
+    static void setOffset(LuaTable table, int dx, int dy, int dz) {
+        table.set("dx", LuaInteger.valueOf(dx));
+        table.set("dy", LuaInteger.valueOf(dy));
+        table.set("dz", LuaInteger.valueOf(dz));
+    }
+
+    private void setOffset(LuaTable table, Location entityLoc) {
+        setOffset(table, entityLoc.getBlockX() - location.getBlockX(),
+                entityLoc.getBlockY() - location.getBlockY(), entityLoc.getBlockZ() - location.getBlockZ());
     }
 
     @Override
@@ -67,6 +82,7 @@ public final class ScannerPeripheral implements Peripheral {
                         entTable.set("x", LuaDouble.valueOf(e.getLocation().getX()));
                         entTable.set("y", LuaDouble.valueOf(e.getLocation().getY()));
                         entTable.set("z", LuaDouble.valueOf(e.getLocation().getZ()));
+                        setOffset(entTable, e.getLocation());
                         entTable.set("distance", LuaDouble.valueOf(e.getLocation().distance(location)));
                         entTable.set("isPlayer", LuaBoolean.valueOf(e instanceof Player));
                         if (e instanceof LivingEntity living) {
@@ -99,6 +115,7 @@ public final class ScannerPeripheral implements Peripheral {
                             pTable.set("x", LuaDouble.valueOf(p.getLocation().getX()));
                             pTable.set("y", LuaDouble.valueOf(p.getLocation().getY()));
                             pTable.set("z", LuaDouble.valueOf(p.getLocation().getZ()));
+                            setOffset(pTable, p.getLocation());
                             pTable.set("distance", LuaDouble.valueOf(p.getLocation().distance(location)));
                             pTable.set("health", LuaDouble.valueOf(p.getHealth()));
                             pTable.set("foodLevel", LuaInteger.valueOf(p.getFoodLevel()));
@@ -149,6 +166,7 @@ public final class ScannerPeripheral implements Peripheral {
                                 bTable.set("x", LuaInteger.valueOf(bx));
                                 bTable.set("y", LuaInteger.valueOf(by));
                                 bTable.set("z", LuaInteger.valueOf(bz));
+                                setOffset(bTable, dx, dy, dz);
                                 bTable.set("material", LuaString.valueOf(matName));
                                 result.set(idx++, bTable);
 
@@ -164,17 +182,26 @@ public final class ScannerPeripheral implements Peripheral {
             }
         });
 
-        // scanner.inspect(x, y, z) -> inspect specific block
+        // scanner.inspect(dx, dy, dz) -> inspect the block at an offset from the scanner (max INSPECT_RANGE)
         table.set("inspect", new ThreeArgFunction() {
             @Override
             public LuaValue call(LuaValue arg1, LuaValue arg2, LuaValue arg3) {
-                int bx = arg1.checkint();
-                int by = arg2.checkint();
-                int bz = arg3.checkint();
+                int dx = arg1.checkint();
+                int dy = arg2.checkint();
+                int dz = arg3.checkint();
+
+                // Unbounded targets = remote x-ray and sync chunk generation anywhere.
+                if (Math.abs(dx) > INSPECT_RANGE || Math.abs(dy) > INSPECT_RANGE || Math.abs(dz) > INSPECT_RANGE) {
+                    throw new LuaError("target out of range (max " + INSPECT_RANGE + " blocks from scanner)");
+                }
+                int bx = location.getBlockX() + dx;
+                int by = location.getBlockY() + dy;
+                int bz = location.getBlockZ() + dz;
 
                 return SyncDispatcher.sync(plugin, () -> {
                     World world = location.getWorld();
-                    if (world == null || by < world.getMinHeight() || by >= world.getMaxHeight()) {
+                    if (world == null || by < world.getMinHeight() || by >= world.getMaxHeight()
+                            || !world.isChunkLoaded(bx >> 4, bz >> 4)) {
                         return LuaValue.NIL;
                     }
                     Block b = world.getBlockAt(bx, by, bz);
@@ -182,6 +209,7 @@ public final class ScannerPeripheral implements Peripheral {
                     bTable.set("x", LuaInteger.valueOf(bx));
                     bTable.set("y", LuaInteger.valueOf(by));
                     bTable.set("z", LuaInteger.valueOf(bz));
+                    setOffset(bTable, dx, dy, dz);
                     bTable.set("material", LuaString.valueOf(b.getType().name()));
                     bTable.set("blockData", LuaString.valueOf(b.getBlockData().getAsString()));
                     return bTable;

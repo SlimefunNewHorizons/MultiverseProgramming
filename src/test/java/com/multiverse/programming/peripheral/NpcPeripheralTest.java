@@ -46,6 +46,34 @@ class NpcPeripheralTest {
     }
 
     @Test
+    @DisplayName("Npc type resolution rejects non-living, unspawnable and boss entities")
+    void testResolveNpcType() {
+        assertEquals(org.bukkit.entity.EntityType.ZOMBIE, NpcPeripheral.resolveNpcType("zombie"));
+        assertEquals(org.bukkit.entity.EntityType.VILLAGER, NpcPeripheral.resolveNpcType("TNT"));
+        assertEquals(org.bukkit.entity.EntityType.VILLAGER, NpcPeripheral.resolveNpcType("END_CRYSTAL"));
+        assertEquals(org.bukkit.entity.EntityType.VILLAGER, NpcPeripheral.resolveNpcType("LIGHTNING_BOLT"));
+        assertEquals(org.bukkit.entity.EntityType.VILLAGER, NpcPeripheral.resolveNpcType("ENDER_DRAGON"));
+        assertEquals(org.bukkit.entity.EntityType.VILLAGER, NpcPeripheral.resolveNpcType("WITHER"));
+        assertEquals(org.bukkit.entity.EntityType.VILLAGER, NpcPeripheral.resolveNpcType("not_a_mob"));
+        assertEquals(org.bukkit.entity.EntityType.VILLAGER, NpcPeripheral.resolveNpcType(null));
+    }
+
+    @Test
+    @DisplayName("Npc registry keeps one instance per block and cleanupAt unregisters it")
+    void testRegistryDoesNotLeak() {
+        new NpcPeripheral(plugin, location.clone());
+        new NpcPeripheral(plugin, location.clone());
+        long atBlock = NpcPeripheral.getActiveNpcs().stream()
+                .filter(n -> n.getLocation().getWorld() == world && n.getLocation().getBlockY() == 64
+                        && n.getLocation().getBlockX() == 0 && n.getLocation().getBlockZ() == 0)
+                .count();
+        assertEquals(1, atBlock);
+
+        NpcPeripheral.cleanupAt(location);
+        assertFalse(NpcPeripheral.hasNpcAt(location));
+    }
+
+    @Test
     @DisplayName("Npc setName and getName update dialogue identity")
     void testName() {
         LuaTable table = npc.toLuaTable().checktable();

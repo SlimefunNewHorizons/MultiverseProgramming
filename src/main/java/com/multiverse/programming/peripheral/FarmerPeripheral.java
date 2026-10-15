@@ -13,6 +13,7 @@ import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.luaj.vm2.LuaBoolean;
+import org.luaj.vm2.LuaError;
 import org.luaj.vm2.LuaInteger;
 import org.luaj.vm2.LuaString;
 import org.luaj.vm2.LuaTable;
@@ -30,6 +31,11 @@ import java.util.Locale;
  * and fertilization.
  */
 public final class FarmerPeripheral implements Peripheral {
+
+    static final int HARVEST_RANGE = 12;
+    private static final java.util.Set<Material> HARVESTABLE_CROPS = java.util.EnumSet.of(
+            Material.WHEAT, Material.CARROTS, Material.POTATOES, Material.BEETROOTS,
+            Material.NETHER_WART, Material.COCOA);
 
     private final JavaPlugin plugin;
     private final Location location;
@@ -73,21 +79,60 @@ public final class FarmerPeripheral implements Peripheral {
         }
     }
 
-    private boolean isCropMature(Block block) {
-        BlockData data = block.getBlockData();
-        if (data instanceof Ageable ageable) {
-            return ageable.getAge() >= ageable.getMaximumAge();
+    /**
+     * Resolves a target given as an offset (dx, dy, dz) from the farmer block, refusing anything beyond
+     * HARVEST_RANGE (remote harvesting of other players' farms) or in an unloaded chunk (sync chunk loading).
+     */
+    private Block blockInRange(World world, int dx, int dy, int dz) {
+        if (Math.abs(dx) > HARVEST_RANGE || Math.abs(dy) > HARVEST_RANGE || Math.abs(dz) > HARVEST_RANGE) {
+            throw new LuaError("target out of range (max " + HARVEST_RANGE + " blocks from farmer)");
         }
+        int x = location.getBlockX() + dx;
+        int y = location.getBlockY() + dy;
+        int z = location.getBlockZ() + dz;
+        if (!world.isChunkLoaded(x >> 4, z >> 4)) {
+            throw new LuaError("target chunk is not loaded");
+        }
+        return world.getBlockAt(x, y, z);
+    }
+
+    private static boolean isStackedPlant(Material mat) {
+        return mat == Material.SUGAR_CANE || mat == Material.CACTUS;
+    }
+
+    private boolean isCropMature(Block block) {
         Material mat = block.getType();
-        return mat == Material.PUMPKIN || mat == Material.MELON || mat == Material.SUGAR_CANE || mat == Material.CACTUS;
+        // Sugar cane / cactus are Ageable too, but "mature" means a segment standing on its own kind.
+        if (isStackedPlant(mat)) {
+            return block.getRelative(BlockFace.DOWN).getType() == mat;
+        }
+        if (mat == Material.PUMPKIN || mat == Material.MELON) {
+            return true;
+        }
+        BlockData data = block.getBlockData();
+        return HARVESTABLE_CROPS.contains(mat) && data instanceof Ageable ageable
+                && ageable.getAge() >= ageable.getMaximumAge();
     }
 
     private boolean harvestCropBlock(Block block, boolean replant) {
         World world = block.getWorld();
         BlockData data = block.getBlockData();
+        Material mat = block.getType();
+
+        if (isStackedPlant(mat)) {
+            // Only break upper parts so the base keeps growing
+            if (block.getRelative(BlockFace.DOWN).getType() == mat) {
+                depositDrops(world, block.getDrops(), block.getLocation());
+                block.setType(Material.AIR);
+                return true;
+            }
+            return false;
+        }
+
         Collection<ItemStack> drops = block.getDrops();
 
-        if (data instanceof Ageable ageable) {
+        // Stems, kelp, fire, chorus, etc. are Ageable but not harvestable crops.
+        if (HARVESTABLE_CROPS.contains(mat) && data instanceof Ageable ageable) {
             if (ageable.getAge() < ageable.getMaximumAge()) {
                 return false;
             }
@@ -101,21 +146,10 @@ public final class FarmerPeripheral implements Peripheral {
             return true;
         }
 
-        Material mat = block.getType();
         if (mat == Material.PUMPKIN || mat == Material.MELON) {
             depositDrops(world, drops, block.getLocation());
             block.setType(Material.AIR);
             return true;
-        }
-
-        if (mat == Material.SUGAR_CANE || mat == Material.CACTUS) {
-            // Check if block below is same type (only break upper parts)
-            Block below = block.getRelative(BlockFace.DOWN);
-            if (below.getType() == mat) {
-                depositDrops(world, drops, block.getLocation());
-                block.setType(Material.AIR);
-                return true;
-            }
         }
 
         return false;
@@ -125,7 +159,7 @@ public final class FarmerPeripheral implements Peripheral {
     public LuaValue toLuaTable() {
         LuaTable table = new LuaTable();
 
-        // farmer.inspectCrop(x, y, z) or farmer.inspectCrop(side)
+        // farmer.inspectCrop(dx, dy, dz) or farmer.inspectCrop(side)
         table.set("inspectCrop", new VarArgFunction() {
             @Override
             public Varargs invoke(Varargs args) {
@@ -135,10 +169,10 @@ public final class FarmerPeripheral implements Peripheral {
 
                     Block target;
                     if (args.narg() >= 3) {
-                        int x = args.checkint(1);
-                        int y = args.checkint(2);
-                        int z = args.checkint(3);
-                        target = world.getBlockAt(x, y, z);
+                        int dx = args.checkint(1);
+                        int dy = args.checkint(2);
+                        int dz = args.checkint(3);
+                        target = blockInRange(world, dx, dy, dz);
                     } else if (args.narg() >= 1) {
                         BlockFace face = TransposerPeripheral.parseFace(args.checkjstring(1));
                         target = location.getBlock().getRelative(face);
@@ -164,7 +198,7 @@ public final class FarmerPeripheral implements Peripheral {
             }
         });
 
-        // farmer.harvest(x, y, z, [replant]) or farmer.harvest(side, [replant])
+        // farmer.harvest(dx, dy, dz, [replant]) or farmer.harvest(side, [replant])
         table.set("harvest", new VarArgFunction() {
             @Override
             public Varargs invoke(Varargs args) {
@@ -176,11 +210,11 @@ public final class FarmerPeripheral implements Peripheral {
                     boolean replant;
 
                     if (args.narg() >= 3 && args.arg(2).isnumber()) {
-                        int x = args.checkint(1);
-                        int y = args.checkint(2);
-                        int z = args.checkint(3);
+                        int dx = args.checkint(1);
+                        int dy = args.checkint(2);
+                        int dz = args.checkint(3);
                         replant = args.narg() >= 4 && args.checkboolean(4);
-                        target = world.getBlockAt(x, y, z);
+                        target = blockInRange(world, dx, dy, dz);
                     } else {
                         String side = args.narg() >= 1 ? args.checkjstring(1) : "down";
                         replant = args.narg() >= 2 && args.checkboolean(2);
@@ -228,7 +262,7 @@ public final class FarmerPeripheral implements Peripheral {
             }
         });
 
-        // farmer.fertilize(x, y, z) or farmer.fertilize(side)
+        // farmer.fertilize(dx, dy, dz) or farmer.fertilize(side)
         table.set("fertilize", new VarArgFunction() {
             @Override
             public Varargs invoke(Varargs args) {
@@ -238,14 +272,20 @@ public final class FarmerPeripheral implements Peripheral {
 
                     Block target;
                     if (args.narg() >= 3 && args.arg(2).isnumber()) {
-                        int x = args.checkint(1);
-                        int y = args.checkint(2);
-                        int z = args.checkint(3);
-                        target = world.getBlockAt(x, y, z);
+                        int dx = args.checkint(1);
+                        int dy = args.checkint(2);
+                        int dz = args.checkint(3);
+                        target = blockInRange(world, dx, dy, dz);
                     } else {
                         String side = args.narg() >= 1 ? args.checkjstring(1) : "down";
                         BlockFace face = TransposerPeripheral.parseFace(side);
                         target = location.getBlock().getRelative(face);
+                    }
+
+                    // Validate the target first so bone meal is never wasted on a non-growable block
+                    if (!(target.getBlockData() instanceof Ageable growable) || isStackedPlant(target.getType())
+                            || growable.getAge() >= growable.getMaximumAge()) {
+                        return LuaBoolean.FALSE;
                     }
 
                     // Check if adjacent containers have bone meal
@@ -269,16 +309,10 @@ public final class FarmerPeripheral implements Peripheral {
                         return LuaBoolean.FALSE;
                     }
 
-                    BlockData data = target.getBlockData();
-                    if (data instanceof Ageable ageable) {
-                        int nextAge = Math.min(ageable.getMaximumAge(), ageable.getAge() + 2);
-                        ageable.setAge(nextAge);
-                        target.setBlockData(ageable);
-                        world.playEffect(target.getLocation(), org.bukkit.Effect.BONE_MEAL_USE, 0);
-                        return LuaBoolean.TRUE;
-                    }
-
-                    return LuaBoolean.FALSE;
+                    growable.setAge(Math.min(growable.getMaximumAge(), growable.getAge() + 2));
+                    target.setBlockData(growable);
+                    world.playEffect(target.getLocation(), org.bukkit.Effect.BONE_MEAL_USE, 0);
+                    return LuaBoolean.TRUE;
                 });
             }
         });

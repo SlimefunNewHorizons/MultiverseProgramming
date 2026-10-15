@@ -39,6 +39,19 @@ public final class SpeakerPeripheral implements Peripheral {
         return location;
     }
 
+    static final float MAX_VOLUME = 3.0f;
+    // The note block pling at pitch 1.0 sounds F#4 (~370 Hz), not A4.
+    static final double PITCH_ONE_HZ = 369.994;
+
+    static float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    /** Converts a frequency to a sound pitch; playable range is 185-740 Hz (pitch 0.5-2.0). */
+    static float toneToPitch(double freqHz) {
+        return clamp((float) (freqHz / PITCH_ONE_HZ), 0.5f, 2.0f);
+    }
+
     private static Instrument parseInstrument(String name) {
         if (name == null) {
             return Instrument.PIANO;
@@ -94,8 +107,9 @@ public final class SpeakerPeripheral implements Peripheral {
             @Override
             public Varargs invoke(Varargs args) {
                 String soundName = args.checkjstring(1);
-                float volume = args.narg() >= 2 ? (float) args.optdouble(2, 1.0) : 1.0f;
-                float pitch = args.narg() >= 3 ? (float) args.optdouble(3, 1.0) : 1.0f;
+                // Volume scales hearing range (~16 blocks per 1.0): cap it so one speaker cannot flood the area.
+                float volume = clamp(args.narg() >= 2 ? (float) args.optdouble(2, 1.0) : 1.0f, 0.0f, MAX_VOLUME);
+                float pitch = clamp(args.narg() >= 3 ? (float) args.optdouble(3, 1.0) : 1.0f, 0.5f, 2.0f);
 
                 SyncDispatcher.syncVoid(plugin, () -> {
                     if (location.getWorld() != null) {
@@ -111,8 +125,7 @@ public final class SpeakerPeripheral implements Peripheral {
             @Override
             public Varargs invoke(Varargs args) {
                 double freq = args.checkdouble(1);
-                // Standard pitch conversion: 440 Hz (A4) corresponds to pitch 1.0
-                float pitch = (float) Math.max(0.5, Math.min(2.0, freq / 440.0));
+                float pitch = toneToPitch(freq);
                 SyncDispatcher.syncVoid(plugin, () -> {
                     if (location.getWorld() != null) {
                         location.getWorld().playSound(location, "block.note_block.pling", SoundCategory.BLOCKS, 1.0f, pitch);

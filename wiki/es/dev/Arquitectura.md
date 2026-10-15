@@ -28,7 +28,7 @@ Este documento detalla el diseño interno, el modelo de hilos (threading), el en
 1. **Configuración**: Inicializa [`ConfigManager`](file:///c:/Users/danie/OneDrive/Documentos/Github/Personal/MultiverseProgramming/src/main/java/com/multiverse/programming/ConfigManager.java), valida las claves, aplica valores predeterminados con retrocompatibilidad y registra los periféricos activados.
 2. **Integraciones con Terceros**:
    - Dependencia suave de `CoreProtect` (`CoreProtectBridge`): verifica la API v9+ para el registro de auditoría de bloques.
-   - Dependencia suave de plugins de reclamos (`ProtectionManager`): enlaza con `WorldGuard`, `GriefPrevention`, `Towny`, `Lands` y `Residence`.
+   - Dependencia suave de plugins de reclamos (`ProtectionManager`): enlaza con `WorldGuard`, `ProtectionStones` y `BentoBox`.
 3. **Gestores del Núcleo**:
    - [`DiskManager`](file:///c:/Users/danie/OneDrive/Documentos/Github/Personal/MultiverseProgramming/src/main/java/com/multiverse/programming/DiskManager.java): Prepara la factoría de disquetes e ítems con programas plantilla.
    - [`BlueprintManager`](file:///c:/Users/danie/OneDrive/Documentos/Github/Personal/MultiverseProgramming/src/main/java/com/multiverse/programming/blueprint/BlueprintManager.java): Escanea la carpeta `plugins/MultiverseProgramming/blueprints/`, carga los metadatos en caché e indexa los esquemas comunitarios.

@@ -50,6 +50,8 @@ monitor.setLine(2, "&eCPU: &cALERTA")
 local texto = monitor.getText()
 ```
 
+Un monitor guarda como máximo 20 líneas de 256 caracteres. `write` desplaza el texto (borra la línea más antigua) cuando está lleno; `setLine` por encima de 20 lanza un error.
+
 ### 2. Auto-Crafter (`crafter`)
 
 Controla el bloque **Crafter** de Minecraft 1.21 para automatizar ensamblaje de recetas.
@@ -70,6 +72,8 @@ if exito then
   print("&a¡Objeto crafteado y dispensado!")
 end
 ```
+
+`craft()` usa la receta real: los remanentes, como los cubos vacíos, se quedan en la cuadrícula, y las recetas especiales (tintes, recolorear shulkers, copiar libros) conservan los datos del ítem.
 
 ### 3. Inventory Transposer (`transposer`)
 
@@ -93,6 +97,8 @@ local movidos = transposer.transferItem("north", "south", 1, 16)
 print("Movidos: " .. movidos)
 ```
 
+Las transferencias siguen las reglas vanilla: no se pueden meter shulkers dentro de shulkers. Cada transferencia lanza `InventoryMoveItemEvent`, así que los plugins de candados pueden bloquearla (devuelve `0`).
+
 ### 4. Sound Synthesizer (`speaker`)
 
 Reproduce notas musicales con afinación exacta, frecuencias de audio en Hz y efectos de sonido de Minecraft.
@@ -103,10 +109,10 @@ speaker.playNote("harp", 12)
 sleep(0.2)
 speaker.playNote("bell", 16)
 
--- Tocar un tono por frecuencia en Hertz (ej. A4 = 440 Hz)
+-- Tocar un tono por frecuencia en Hertz (rango tocable 185-740 Hz; 370 Hz = F#4 = tono nativo)
 speaker.playTone(440.0)
 
--- Reproducir efectos de sonido de Minecraft
+-- Reproducir efectos de sonido: playSound(nombre, [volumen 0-3], [tono 0.5-2])
 speaker.playSound("entity.player.levelup", 1.0, 1.2)
 ```
 
@@ -133,12 +139,16 @@ for i, b in ipairs(minerales) do
   print(b.material .. " en [" .. b.x .. ", " .. b.y .. ", " .. b.z .. "]")
 end
 
--- Inspeccionar un bloque específico en coordenadas absolutas
-local bloque = scanner.inspect(100, 64, 200)
+-- Inspeccionar un bloque por desplazamiento desde el scanner (dx, dy, dz; máximo 16 bloques).
+-- Los resultados de escaneo también traen dx/dy/dz, así que se pueden pasar directamente.
+-- Devuelve nil si el chunk no está cargado.
+local bloque = scanner.inspect(minerales[1].dx, minerales[1].dy, minerales[1].dz)
 if bloque then
   print("Material: " .. bloque.material .. " Datos: " .. bloque.blockData)
 end
 ```
+
+Las posiciones en los resultados siempre incluyen las coordenadas absolutas del mundo (`x`, `y`, `z`) y el desplazamiento desde el scanner (`dx`, `dy`, `dz`).
 
 ### 6. Cartographer & Map Renderer (`cartographer`)
 
@@ -156,6 +166,7 @@ if ok then
 end
 
 -- Generar un ítem de mapa de Minecraft con escala (0 a 4)
+-- Consume un mapa vacío (o papel) de un contenedor adyacente
 -- El mapa generado se deposita en un cofre adyacente o cae al suelo
 local exito, mapId = cartographer.createMap(1)
 if exito then
@@ -179,7 +190,9 @@ local soporte = alchemist.inspectStand()
 print("Nivel de combustible: " .. soporte.fuelLevel)
 
 -- Sintetizar una poción: alchemist.brew(tipoPocion, [modificador], [esArrojadiza])
--- Modificadores: "normal", "extended" / "long" (Redstone), "strong" / "ii" (Glowstone)
+-- Base: una Botella de Agua normal (nunca se gastan otras pociones)
+-- Modificadores: "normal", "extended" / "long" (Redstone -> variante LONG_), "strong" / "ii" (Glowstone -> variante STRONG_)
+-- Falla si la poción no tiene esa variante o si se piden ambos modificadores
 local ok, msg = alchemist.brew("SPEED", "extended", false)
 if ok then
   print("&a" .. msg)
@@ -193,7 +206,7 @@ end
 Inspecciona la madurez de los cultivos, cosecha automáticamente cultivos maduros, replanta semillas y fertiliza con polvo de hueso desde contenedores adyacentes.
 
 ```lua
--- Inspeccionar madurez de un cultivo (por lado o coordenadas)
+-- Inspeccionar madurez de un cultivo (por lado, o por desplazamiento dx, dy, dz desde el farmer)
 local cultivo = farmer.inspectCrop("down")
 if cultivo.isCrop then
   print("Cultivo: " .. cultivo.material .. " Maduro: " .. tostring(cultivo.mature))
@@ -201,6 +214,9 @@ end
 
 -- Cosechar un único cultivo (con replantado automático = true)
 local cosechado = farmer.harvest("down", true)
+
+-- Cosechar por desplazamiento: 1 bloque abajo, 3 al sur (máximo 12 bloques por eje)
+farmer.harvest(0, -1, 3, true)
 
 -- Cosechar un área completa (radio hasta 12) con replantado
 local total = farmer.harvestArea(4, true)
@@ -217,6 +233,10 @@ Crea diálogos interactivos, opciones de chat con jugadores, preguntas de opció
 ```lua
 -- Configurar nombre flotante sobre el bloque
 npc.setName("&6[Gran Archimago]")
+
+-- Aparecer como otro mob: solo se aceptan mobs vivos, invocables y que no sean jefes
+-- (cualquier otro, p. ej. "TNT" o "ENDER_DRAGON", se convierte en VILLAGER)
+npc.spawn("ZOMBIE")
 
 -- Enviar mensaje de diálogo a un jugador específico
 npc.say("Steve", "¡Bienvenido a la academia arcana!")
@@ -285,6 +305,10 @@ turtle.place()      -- Coloca el bloque de la ranura seleccionada al frente
 turtle.placeUp()    -- Coloca hacia arriba
 turtle.placeDown()  -- Coloca hacia abajo
 ```
+
+- Minar, colocar y moverse respetan los claims (WorldGuard, ProtectionStones, BentoBox) en nombre del dueño de la tortuga. Dentro de un claim donde el dueño no puede construir, la acción devuelve `false`.
+- Minar un contenedor (cofre, barril...) guarda su contenido en el inventario de la tortuga.
+- `place` rechaza ítems con contenido guardado, como un shulker lleno, para que no se vacíen.
 
 ### Inventario y Combustible
 
@@ -382,6 +406,7 @@ Las tortugas colocadas en el mundo recuerdan automáticamente el **UUID del juga
 
 #### Protección y Anti-Griefing
 - **Protección contra destrucción no autorizada:** Solo el jugador dueño o un administrador del servidor (`multiverseprogramming.admin`) pueden romper o desmontar las tortugas colocadas.
+- **Protección de claims:** `dig`, `place` y el movimiento se comprueban contra WorldGuard, ProtectionStones y BentoBox para el dueño de la tortuga. Las tortugas sin dueño no pueden modificar terreno con claim.
 - **Caída segura de inventario y disco:** Al desmontar la tortuga, se sueltan en el suelo los 16 ítems de su inventario, el disco insertado y el ítem de la propia tortuga.
 
 #### Detener Tareas y Construcción (`/mvprog stop`)

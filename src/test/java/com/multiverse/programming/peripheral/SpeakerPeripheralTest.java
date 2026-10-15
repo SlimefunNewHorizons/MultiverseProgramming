@@ -59,8 +59,18 @@ class SpeakerPeripheralTest {
     @DisplayName("playTone plays pling sound with converted pitch")
     void testPlayTone() {
         LuaValue table = speaker.toLuaTable();
-        table.get("playTone").call(LuaValue.valueOf(440.0));
+        // F#4 is the pling's native pitch (1.0)
+        table.get("playTone").call(LuaValue.valueOf(SpeakerPeripheral.PITCH_ONE_HZ));
 
         verify(world).playSound(eq(location), eq("block.note_block.pling"), any(), eq(1.0f), eq(1.0f));
+    }
+
+    @Test
+    @DisplayName("Speaker clamps volume and tunes tones to the pling pitch")
+    void testClampsAndTuning() {
+        assertEquals(SpeakerPeripheral.MAX_VOLUME, SpeakerPeripheral.clamp(1_000_000f, 0f, SpeakerPeripheral.MAX_VOLUME));
+        assertEquals(1.0f, SpeakerPeripheral.toneToPitch(369.994), 0.001f);
+        assertEquals(2.0f, SpeakerPeripheral.toneToPitch(740.0), 0.01f);
+        assertEquals(0.5f, SpeakerPeripheral.toneToPitch(20.0), 0.001f);
     }
 }

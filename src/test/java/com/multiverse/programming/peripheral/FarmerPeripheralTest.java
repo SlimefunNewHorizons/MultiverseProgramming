@@ -58,10 +58,11 @@ class FarmerPeripheralTest {
         when(ageable.getMaximumAge()).thenReturn(7);
         when(cropBlock.getBlockData()).thenReturn(ageable);
 
+        when(world.isChunkLoaded(anyInt(), anyInt())).thenReturn(true);
         when(world.getBlockAt(0, 63, 0)).thenReturn(cropBlock);
 
         LuaTable table = farmer.toLuaTable().checktable();
-        LuaValue res = table.get("inspectCrop").call(LuaValue.valueOf(0), LuaValue.valueOf(63), LuaValue.valueOf(0));
+        LuaValue res = table.get("inspectCrop").call(LuaValue.valueOf(0), LuaValue.valueOf(-1), LuaValue.valueOf(0));
 
         assertTrue(res.istable());
         LuaTable info = res.checktable();
@@ -69,5 +70,46 @@ class FarmerPeripheralTest {
         assertTrue(info.get("mature").toboolean());
         assertEquals(7, info.get("age").toint());
         assertEquals(7, info.get("maxAge").toint());
+    }
+
+    @Test
+    @DisplayName("harvest and inspect refuse far or unloaded targets")
+    void testRangeLimits() {
+        LuaTable table = farmer.toLuaTable().checktable();
+        assertThrows(org.luaj.vm2.LuaError.class, () -> table.get("harvest").invoke(LuaValue.varargsOf(new LuaValue[]{
+                LuaValue.valueOf(5000), LuaValue.valueOf(64), LuaValue.valueOf(0)})));
+        when(world.isChunkLoaded(anyInt(), anyInt())).thenReturn(false);
+        assertThrows(org.luaj.vm2.LuaError.class, () -> table.get("inspectCrop").invoke(LuaValue.varargsOf(new LuaValue[]{
+                LuaValue.valueOf(1), LuaValue.valueOf(0), LuaValue.valueOf(1)})));
+        verify(world, never()).getBlockAt(1, 64, 1);
+    }
+
+    @Test
+    @DisplayName("harvest skips stems and sugar cane bases")
+    void testHarvestOnlyRealCrops() {
+        when(world.isChunkLoaded(anyInt(), anyInt())).thenReturn(true);
+        LuaTable table = farmer.toLuaTable().checktable();
+
+        Block stem = mock(Block.class);
+        when(stem.getType()).thenReturn(Material.MELON_STEM);
+        Ageable stemAge = mock(Ageable.class);
+        when(stemAge.getAge()).thenReturn(7);
+        when(stemAge.getMaximumAge()).thenReturn(7);
+        when(stem.getBlockData()).thenReturn(stemAge);
+        when(world.getBlockAt(1, 64, 0)).thenReturn(stem);
+        assertFalse(table.get("harvest").invoke(LuaValue.varargsOf(new LuaValue[]{
+                LuaValue.valueOf(1), LuaValue.valueOf(0), LuaValue.valueOf(0)})).arg1().toboolean());
+
+        Block caneBase = mock(Block.class);
+        Block dirt = mock(Block.class);
+        when(dirt.getType()).thenReturn(Material.DIRT);
+        when(caneBase.getType()).thenReturn(Material.SUGAR_CANE);
+        when(caneBase.getRelative(org.bukkit.block.BlockFace.DOWN)).thenReturn(dirt);
+        when(world.getBlockAt(2, 64, 0)).thenReturn(caneBase);
+        assertFalse(table.get("harvest").invoke(LuaValue.varargsOf(new LuaValue[]{
+                LuaValue.valueOf(2), LuaValue.valueOf(0), LuaValue.valueOf(0)})).arg1().toboolean());
+
+        verify(stem, never()).setType(any());
+        verify(caneBase, never()).setType(any());
     }
 }

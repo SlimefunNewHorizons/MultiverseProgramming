@@ -882,4 +882,87 @@ class TurtleTest {
         assertFalse(turtle.isBlockProtected(insideLoc).isProtected());
         assertFalse(turtle.isBlockProtected(storage1).isProtected());
     }
+
+    private Turtle protectedTurtle(boolean canBuild, Block target) {
+        MultiverseProgrammingPlugin mvp = mock(MultiverseProgrammingPlugin.class);
+        when(mvp.isEnabled()).thenReturn(true);
+        com.multiverse.programming.protection.ProtectionManager pm = mock(com.multiverse.programming.protection.ProtectionManager.class);
+        when(pm.canBuildAt(any(), any())).thenReturn(canBuild);
+        when(mvp.getProtectionManager()).thenReturn(pm);
+
+        Block turtleBlock = mock(Block.class);
+        when(mockWorld.getBlockAt(startLoc)).thenReturn(turtleBlock);
+        when(turtleBlock.getRelative(BlockFace.NORTH)).thenReturn(target);
+        when(target.getWorld()).thenReturn(mockWorld);
+        when(target.getLocation()).thenReturn(new Location(mockWorld, 10, 64, 19));
+        return new Turtle(mvp, "T-PROT", startLoc, BlockFace.NORTH, UUID.randomUUID());
+    }
+
+    @Test
+    @DisplayName("dig and place are refused inside protected areas")
+    void testDigAndPlaceRespectProtection() {
+        Block target = mock(Block.class);
+        when(target.getType()).thenReturn(Material.STONE);
+        when(target.isEmpty()).thenReturn(false);
+        Turtle turtle = protectedTurtle(false, target);
+
+        assertFalse(turtle.dig());
+        verify(target, never()).setType(any(), anyBoolean());
+
+        when(target.isEmpty()).thenReturn(true);
+        ItemStack stone = mock(ItemStack.class);
+        when(stone.getType()).thenReturn(Material.STONE);
+        when(stone.getAmount()).thenReturn(5);
+        turtle.setItem(0, stone);
+        assertFalse(turtle.place());
+        verify(target, never()).setType(any(), anyBoolean());
+    }
+
+    @Test
+    @DisplayName("dig collects chest contents instead of deleting them")
+    void testDigKeepsContainerContents() {
+        Block target = mock(Block.class);
+        when(target.getType()).thenReturn(Material.CHEST);
+        when(target.isEmpty()).thenReturn(false);
+        Turtle turtle = protectedTurtle(true, target);
+
+        ItemStack chestItem = mock(ItemStack.class);
+        when(chestItem.getType()).thenReturn(Material.CHEST);
+        when(chestItem.getAmount()).thenReturn(1);
+        when(chestItem.clone()).thenReturn(chestItem);
+        when(target.getDrops()).thenReturn(java.util.List.of(chestItem));
+
+        ItemStack diamond = mock(ItemStack.class);
+        when(diamond.getType()).thenReturn(Material.DIAMOND);
+        when(diamond.getAmount()).thenReturn(3);
+        when(diamond.clone()).thenReturn(diamond);
+        org.bukkit.block.Chest chest = mock(org.bukkit.block.Chest.class);
+        org.bukkit.inventory.Inventory snapshot = mock(org.bukkit.inventory.Inventory.class);
+        when(snapshot.getContents()).thenReturn(new ItemStack[]{diamond, null});
+        when(chest.getSnapshotInventory()).thenReturn(snapshot);
+        when(target.getState()).thenReturn(chest);
+
+        assertTrue(turtle.dig());
+        assertTrue(java.util.Arrays.asList(turtle.getInventory()).contains(diamond));
+    }
+
+    @Test
+    @DisplayName("place refuses items that carry stored block contents")
+    void testPlaceRefusesFilledShulker() {
+        Block target = mock(Block.class);
+        when(target.isEmpty()).thenReturn(true);
+        Turtle turtle = protectedTurtle(true, target);
+
+        ItemStack shulker = mock(ItemStack.class);
+        when(shulker.getType()).thenReturn(Material.SHULKER_BOX);
+        when(shulker.getAmount()).thenReturn(1);
+        when(shulker.hasItemMeta()).thenReturn(true);
+        org.bukkit.inventory.meta.BlockStateMeta meta = mock(org.bukkit.inventory.meta.BlockStateMeta.class);
+        when(meta.hasBlockState()).thenReturn(true);
+        when(shulker.getItemMeta()).thenReturn(meta);
+        turtle.setItem(0, shulker);
+
+        assertFalse(turtle.place());
+        verify(target, never()).setType(any(), anyBoolean());
+    }
 }

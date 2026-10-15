@@ -91,7 +91,7 @@ blueprint-player-quota-mb: 15.0
 | `quarry-block` | `string` | `BLAST_FURNACE` | Material used as Turtle Quarry Engine Upgrade (functions exclusively with turtles) |
 | `enable-recipe-*` | `boolean` | `true` | Independent toggle to enable or disable crafting recipe for each device |
 | `enable-*` | `boolean` | `true` | Independent toggle to enable or disable gameplay functionality for each device |
-| `worldguard-protection-check` | `boolean` | `true` | Prevents turtles from building in WorldGuard regions without membership/ownership |
+| `worldguard-protection-check` | `boolean` | `true` | Prevents turtles from building, digging or moving in WorldGuard regions without membership/ownership |
 | `protection-stones-require-owner` | `boolean` | `false` | When `true`, requires the turtle owner to be the region owner (not just member) in ProtectionStones |
 | `turtle-fuel-required` | `boolean` | `false` | When `true`, spawns a dedicated Fuel Chest with hologram `"Place fuel here"` and requires fuel |
 | `turtle-require-materials` | `boolean` | `false` | When `true`, spawns a Supply Chest with hologram `"Place construction blocks here"` |
@@ -167,7 +167,7 @@ The `multiverseprogramming.turtle` node decides whether a player can interact wi
 ## Region Protection & Security
 
 The plugin automatically hooks into **WorldGuard** and **ProtectionStones** (without hard dependencies):
-1. **Region Permission Verification**: When a turtle initiates a build, the bounding volume is verified against claims. If the turtle's owner is not a member or owner of the claim, the build is cancelled immediately.
+1. **Region Permission Verification**: Blueprint builds and quarries verify their whole volume before starting, and every single `dig`, `place` and turtle movement checks its target block. If the turtle's owner is not a member or owner of the claim, the action is cancelled. BentoBox islands are checked as well.
 2. **Owner-Only Restrictions**: By enabling `protection-stones-require-owner: true`, admins can enforce that only region owners (not regular members) can build using turtles inside claims.
 3. **Admin Bypass**: Server administrators with `multiverseprogramming.admin` or `*` bypass claim restrictions.
 4. **Dupe & Chunk-Ban Prevention**: Turtles and automated containers strictly prohibit storing nested containers (e.g. shulker boxes inside chests) and writable/written books inside container inventories during construction.
