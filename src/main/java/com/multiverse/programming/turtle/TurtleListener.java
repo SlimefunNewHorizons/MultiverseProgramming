@@ -421,7 +421,7 @@ public final class TurtleListener implements Listener {
 
         Consumer<String> onLine = line -> Bukkit.getScheduler().runTask(plugin, () -> {
             if (player.isOnline()) {
-                player.sendMessage("§f" + line);
+                player.sendMessage("§f" + org.bukkit.ChatColor.translateAlternateColorCodes('&', line));
             }
         });
 

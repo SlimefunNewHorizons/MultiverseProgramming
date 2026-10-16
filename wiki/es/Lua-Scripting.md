@@ -50,7 +50,7 @@ monitor.setLine(2, "&eCPU: &cALERTA")
 local texto = monitor.getText()
 ```
 
-Un monitor guarda como máximo 20 líneas de 256 caracteres. `write` desplaza el texto (borra la línea más antigua) cuando está lleno; `setLine` por encima de 20 lanza un error.
+Un monitor guarda como máximo 20 líneas de 512 caracteres (incluidos los códigos de color). `write` desplaza el texto (borra la línea más antigua) cuando está lleno; `setLine` por encima de 20 lanza un error.
 
 ### 2. Auto-Crafter (`crafter`)
 
@@ -152,18 +152,75 @@ Las posiciones en los resultados siempre incluyen las coordenadas absolutas del 
 
 ### 6. Cartographer & Map Renderer (`cartographer`)
 
-Inspecciona biomas, escanea elevaciones topográficas, renderiza mapas de radar ASCII directamente en monitores adyacentes y genera mapas de Minecraft con escala configurable.
+Inspecciona biomas, escanea elevaciones topográficas, muestra un mapa del terreno en vivo y en alta resolución (hasta 128×128) sobre un monitor o sobre la mesa, y genera mapas de Minecraft con escala configurable.
 
 ```lua
 -- Consultar bioma actual
 local bioma = cartographer.getBiome()
 print("Bioma: " .. (bioma or "Desconocido"))
 
--- Renderizar radar topográfico ASCII directamente en un monitor adyacente
-local ok, err = cartographer.renderToMonitor("north", 6)
+-- Mapa en vivo sobre un monitor (OCHRE_FROGLIGHT por defecto) pegado al CARTÓGRAFO en ese lado.
+-- Radio 8-64; por defecto 64 = 128x128 bloques, un bloque por celda.
+local ok, err = cartographer.renderToMonitor("north")
 if ok then
-  print("¡Topografía proyectada en el monitor!")
+  print("¡Mapa en el monitor!")
+else
+  print("Error: " .. err)  -- p. ej. "No monitor on side north"
 end
+
+-- El mismo mapa en vivo flotando sobre la mesa de cartografía
+cartographer.project(32)  -- 64x64
+
+-- Modo radar: necesita un SCANNER conectado a la misma computadora, además del cartógrafo y el monitor
+local ok, err = cartographer.radar("north")       -- radar de 128x128 en el monitor
+cartographer.radar("north", 32)                    -- radar de 64x64 con barrido giratorio
+cartographer.renderToMonitor("north", 64, "radar") -- igual que radar("north")
+cartographer.project(32, "radar")                  -- radar sobre la mesa
+```
+
+Montaje del modo radar: la computadora, con el scanner (observador) y el cartógrafo pegados a ella, y el monitor pegado al cartógrafo.
+
+Cómo funciona el mapa en vivo:
+- El terreno usa los colores de mapa vanilla mezclados con un degradado por altura, relieve sombreado con luz desde el noroeste, curvas de nivel cada 4 bloques (más oscuras cada 20) y agua más oscura según la profundidad. El norte queda arriba.
+- Los jugadores (cruz blanca) se mueven en el mapa dos veces por segundo. La cabecera cuenta los jugadores visibles. No se muestran espectadores ni jugadores invisibles.
+- El modo radar oscurece el terreno, dibuja anillos de distancia cada cuarto del alcance y también sigue a los mobs hostiles (cruz roja) y a los animales (rosa), con contadores en vivo en la cabecera. Con radio 32 o menos, un haz de barrido da una vuelta cada 6 segundos; a tamaños mayores el barrido se desactiva porque obligaría a reenviar todo el mapa en cada paso. Romper el scanner quita el radar.
+- Los chunks sin cargar se dibujan oscuros; el mapa nunca carga chunks. El terreno se actualiza cada 20 segundos.
+- El mapa se queda al terminar el programa. Se quita con el botón **⏹ Stop** de la computadora avanzada (o shift+clic derecho sobre ella), `cartographer.clear()`, `clearMonitor(lado)`, `clearHologram()`, shift+clic derecho en el monitor o el cartógrafo, o rompiendo cualquiera de los dos bloques. No se guarda al reiniciar el servidor.
+
+#### Script de radar con alertas
+
+Ejecútalo en una **computadora avanzada** (los bucles largos necesitan su tiempo ilimitado). Activa el radar en el monitor y avisa en el chat, con un sonido si hay un speaker conectado, cuando un jugador entra o sale del alcance. Para pararlo todo, pulsa **⏹ Stop** en el GUI de la computadora.
+
+```lua
+-- Montaje: computadora + scanner + cartógrafo pegados a ella; monitor pegado al cartógrafo (lado "north")
+local RADIO = 32          -- 64x64 con barrido; usa 64 para 128x128 sin barrido
+
+local ok, err = cartographer.radar("north", RADIO)
+if not ok then
+  print("&cNo se pudo activar el radar: " .. err)
+  return
+end
+print("&aRadar activo. Pulsa Stop en la computadora para pararlo.")
+
+local dentro = {}
+while true do
+  local ahora = {}
+  for _, p in ipairs(scanner.scanPlayers(RADIO)) do
+    ahora[p.name] = true
+    if not dentro[p.name] then
+      print("&e[Radar] " .. p.name .. " entró a " .. math.floor(p.distance) .. " bloques")
+      if speaker then speaker.playNote("bell", 18) end
+    end
+  end
+  for nombre in pairs(dentro) do
+    if not ahora[nombre] then print("&7[Radar] " .. nombre .. " salió del alcance") end
+  end
+  dentro = ahora
+  sleep(2)
+end
+```
+
+Si sólo quieres ver el radar, basta con una línea: `cartographer.radar("north")`. El radar sigue funcionando aunque el programa termine.
 
 -- Generar un ítem de mapa de Minecraft con escala (0 a 4)
 -- Consume un mapa vacío (o papel) de un contenedor adyacente

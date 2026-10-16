@@ -78,6 +78,7 @@ public class MultiverseProgrammingPlugin extends JavaPlugin {
             computerListener.saveAdvancedDisks();
         }
         ComputerListener.cancelAll();
+        com.multiverse.programming.peripheral.MapDisplay.removeAll();
         if (recipeManager != null) {
             recipeManager.unregisterAll();
         }

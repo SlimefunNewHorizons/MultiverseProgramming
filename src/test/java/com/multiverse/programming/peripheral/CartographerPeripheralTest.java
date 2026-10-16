@@ -77,6 +77,28 @@ class CartographerPeripheralTest {
     }
 
     @Test
+    @DisplayName("map radius defaults to the full 128x128 map and is clamped")
+    void testMapRadius() {
+        assertEquals(MapDisplay.MAX_RADIUS, CartographerPeripheral.mapRadius(LuaValue.NONE, 1));
+        assertEquals(MapDisplay.MIN_RADIUS, CartographerPeripheral.mapRadius(LuaValue.valueOf(2), 1));
+        assertEquals(MapDisplay.MAX_RADIUS, CartographerPeripheral.mapRadius(LuaValue.valueOf(500), 1));
+        assertEquals(20, CartographerPeripheral.mapRadius(LuaValue.varargsOf(LuaValue.valueOf("north"), LuaValue.valueOf(20)), 2));
+    }
+
+    @Test
+    @DisplayName("radar needs a scanner connected to the same computer")
+    void testRadarNeedsScanner() {
+        LuaTable table = cartographer.toLuaTable().checktable();
+        org.luaj.vm2.Varargs res = table.get("radar").invoke(LuaValue.NONE);
+        assertFalse(res.arg1().toboolean());
+        assertTrue(res.arg(2).tojstring().contains("scanner"));
+
+        cartographer.setScanner(new ScannerPeripheral(plugin, new Location(world, 1, 64, 0)));
+        assertTrue(table.get("radar").invoke(LuaValue.valueOf(32)).arg1().toboolean());
+        assertTrue(table.get("clear").call().toboolean());
+    }
+
+    @Test
     @DisplayName("createMap fails without an empty map or paper nearby")
     void testCreateMapNeedsBlank() {
         Block self = mock(Block.class);

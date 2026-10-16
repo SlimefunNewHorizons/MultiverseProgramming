@@ -6,7 +6,7 @@
 
     <groupId>com.multiverse</groupId>
     <artifactId>multiverse-programming</artifactId>
-    <version>1.2.0</version>
+    <version>1.2.2</version>
     <packaging>jar</packaging>
     <name>MultiverseProgramming</name>
     <description>Computers with Lua and floppy disks for Purpur/Paper</description>

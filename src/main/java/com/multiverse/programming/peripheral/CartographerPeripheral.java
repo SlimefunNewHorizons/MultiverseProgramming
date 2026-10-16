@@ -46,6 +46,7 @@ public final class CartographerPeripheral implements Peripheral {
     private final JavaPlugin plugin;
     private final Location location;
     private Entity hologramEntity;
+    private ScannerPeripheral scanner;
 
     public CartographerPeripheral(JavaPlugin plugin, Location location) {
         this.plugin = plugin;
@@ -74,6 +75,7 @@ public final class CartographerPeripheral implements Peripheral {
                 display.setText(text);
                 display.setBillboard(Display.Billboard.CENTER);
                 display.setDefaultBackground(true);
+                display.setLineWidth(MonitorPeripheral.LINE_WIDTH);
                 display.setShadowed(true);
                 display.setSeeThrough(true);
             });
@@ -109,6 +111,7 @@ public final class CartographerPeripheral implements Peripheral {
         Block rel = block.getRelative(face);
         if (rel != null) {
             MonitorPeripheral.removeDisplayAt(rel.getLocation());
+            MapDisplay.removeAt(rel.getLocation());
         }
     }
 
@@ -120,6 +123,7 @@ public final class CartographerPeripheral implements Peripheral {
             Block rel = block.getRelative(face);
             if (rel != null) {
                 MonitorPeripheral.removeDisplayAt(rel.getLocation());
+                MapDisplay.removeAt(rel.getLocation());
             }
         }
     }
@@ -205,42 +209,73 @@ public final class CartographerPeripheral implements Peripheral {
         return false;
     }
 
-    public String generateAsciiMap(int radius) {
-        World world = location.getWorld();
-        if (world == null) return null;
+    /** Map radius from an optional Lua argument; defaults to the full 128x128 map. */
+    static int mapRadius(Varargs args, int index) {
+        return args.narg() >= index && !args.arg(index).isnil()
+                ? Math.max(MapDisplay.MIN_RADIUS, Math.min(MapDisplay.MAX_RADIUS, args.checkint(index)))
+                : MapDisplay.MAX_RADIUS;
+    }
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("=== MAP SCAN (R:").append(radius).append(") ===\n");
+    /** Set by PeripheralManager when a scanner is connected to the same computer; radar mode needs it. */
+    void setScanner(ScannerPeripheral scanner) {
+        this.scanner = scanner;
+    }
 
-        int originX = location.getBlockX();
-        int originZ = location.getBlockZ();
-        int selfY = location.getBlockY();
+    /** True when the optional mode argument is "radar". */
+    static boolean isRadarMode(Varargs args, int index) {
+        return args.narg() >= index && !args.arg(index).isnil() && "radar".equalsIgnoreCase(args.checkjstring(index).trim());
+    }
 
-        for (int dz = -radius; dz <= radius; dz++) {
-            for (int dx = -radius; dx <= radius; dx++) {
-                int x = originX + dx;
-                int z = originZ + dz;
-                int highY = world.getHighestBlockYAt(x, z);
-                Block top = world.getBlockAt(x, highY, z);
-                Material mat = top.getType();
-
-                if (dx == 0 && dz == 0) {
-                    sb.append("X"); // Self
-                } else if (mat == Material.WATER) {
-                    sb.append("~");
-                } else if (mat == Material.LAVA) {
-                    sb.append("!");
-                } else if (highY > selfY + 2) {
-                    sb.append("^"); // High terrain
-                } else if (highY < selfY - 2) {
-                    sb.append("v"); // Low terrain
-                } else {
-                    sb.append(".");
-                }
-            }
-            sb.append("\n");
+    /**
+     * Shows the live map above the monitor on {@code face}, or above the cartographer when {@code face} is null.
+     * Radar mode also needs a scanner on the same computer and removes itself if the scanner is broken.
+     * Runs on the main thread.
+     */
+    private Varargs showLiveMap(BlockFace face, String sideStr, int radius, boolean radar) {
+        if (location.getWorld() == null) {
+            return LuaValue.varargsOf(LuaBoolean.FALSE, LuaString.valueOf("World not loaded"));
         }
-        return sb.toString().trim();
+        if (radar && scanner == null) {
+            return LuaValue.varargsOf(LuaBoolean.FALSE, LuaString.valueOf("Radar mode needs a scanner connected to the computer"));
+        }
+        boolean onMonitor = face != null;
+        Location anchor = location;
+        if (onMonitor) {
+            Block rel = location.getBlock().getRelative(face);
+            if (rel.getType() != monitorMaterial()) {
+                return LuaValue.varargsOf(LuaBoolean.FALSE, LuaString.valueOf("No monitor on side " + sideStr));
+            }
+            anchor = rel.getLocation();
+            MonitorPeripheral.removeDisplayAt(anchor);
+        } else {
+            clearHologram();
+        }
+        Location monitorLoc = anchor;
+        Location scannerLoc = radar ? scanner.getLocation() : null;
+        Material scannerMat = scannerMaterial();
+        // Live map: stays after the program ends and removes itself if one of its blocks is broken.
+        MapDisplay.show(plugin, location, anchor, radius, radar,
+                () -> location.getBlock().getType() == cartographerMaterial()
+                        && (!onMonitor || monitorLoc.getBlock().getType() == monitorMaterial())
+                        && (scannerLoc == null || scannerLoc.getBlock().getType() == scannerMat));
+        String message = onMonitor
+                ? (radar ? "Radar shown on monitor" : "Rendered to monitor")
+                : (radar ? "Radar projected above cartographer" : "Projected map above cartographer");
+        return LuaValue.varargsOf(LuaBoolean.TRUE, LuaString.valueOf(message));
+    }
+
+    private Material scannerMaterial() {
+        if (plugin instanceof MultiverseProgrammingPlugin mp && mp.getConfigManager() != null) {
+            return mp.getConfigManager().getScannerBlock();
+        }
+        return Material.OBSERVER;
+    }
+
+    private Material cartographerMaterial() {
+        if (plugin instanceof MultiverseProgrammingPlugin mp && mp.getConfigManager() != null) {
+            return mp.getConfigManager().getCartographerBlock();
+        }
+        return Material.CARTOGRAPHY_TABLE;
     }
 
     @Override
@@ -352,19 +387,13 @@ public final class CartographerPeripheral implements Peripheral {
             }
         });
 
-        // cartographer.project([radius]) / cartographer.render([radius])
+        // cartographer.project([radius], [mode]) / cartographer.render(...) -> live map floating above the cartographer
         table.set("project", new VarArgFunction() {
             @Override
             public Varargs invoke(Varargs args) {
-                int radius = args.narg() >= 1 ? Math.min(8, Math.max(1, args.checkint(1))) : 4;
-                return SyncDispatcher.sync(plugin, () -> {
-                    String mapText = generateAsciiMap(radius);
-                    if (mapText == null) {
-                        return varargsOf(LuaBoolean.FALSE, LuaString.valueOf("World not loaded"));
-                    }
-                    updateHologram(mapText);
-                    return varargsOf(LuaBoolean.TRUE, LuaString.valueOf("Projected map above cartographer"));
-                });
+                int radius = mapRadius(args, 1);
+                boolean radar = isRadarMode(args, 2);
+                return SyncDispatcher.sync(plugin, () -> showLiveMap(null, null, radius, radar));
             }
         });
         table.set("render", table.get("project"));
@@ -393,6 +422,7 @@ public final class CartographerPeripheral implements Peripheral {
                     } else {
                         clearHologram();
                         clearAllAdjacentMonitors();
+                        MapDisplay.removeForCartographer(location);
                     }
                     return null;
                 });
@@ -406,6 +436,7 @@ public final class CartographerPeripheral implements Peripheral {
             public LuaValue call() {
                 SyncDispatcher.sync(plugin, () -> {
                     clearHologram();
+                    MapDisplay.removeAt(location);
                     return null;
                 });
                 return LuaBoolean.TRUE;
@@ -432,36 +463,31 @@ public final class CartographerPeripheral implements Peripheral {
             }
         });
 
-        // cartographer.renderToMonitor(side, [radius])
+        // cartographer.renderToMonitor(side, [radius], [mode]) -> live map above the monitor on that side
         table.set("renderToMonitor", new VarArgFunction() {
             @Override
             public Varargs invoke(Varargs args) {
                 String sideStr = args.checkjstring(1);
-                int radius = args.narg() >= 2 ? Math.min(8, Math.max(1, args.checkint(2))) : 4;
                 BlockFace face = TransposerPeripheral.parseFace(sideStr);
-
-                return SyncDispatcher.sync(plugin, () -> {
-                    World world = location.getWorld();
-                    if (world == null) {
-                        return varargsOf(LuaBoolean.FALSE, LuaString.valueOf("World not loaded"));
-                    }
-                    Block rel = location.getBlock().getRelative(face);
-                    if (rel.getType() != monitorMaterial()) {
-                        return varargsOf(LuaBoolean.FALSE, LuaString.valueOf("No monitor on side " + sideStr));
-                    }
-
-                    MonitorPeripheral monitor = new MonitorPeripheral(plugin, rel.getLocation());
-                    String mapText = generateAsciiMap(radius);
-                    if (mapText == null) {
-                        return varargsOf(LuaBoolean.FALSE, LuaString.valueOf("World not loaded"));
-                    }
-
-                    monitor.setText(mapText);
-                    return varargsOf(LuaBoolean.TRUE, LuaString.valueOf("Rendered to monitor"));
-                });
+                int radius = mapRadius(args, 2);
+                boolean radar = isRadarMode(args, 3);
+                return SyncDispatcher.sync(plugin, () -> showLiveMap(face, sideStr, radius, radar));
             }
         });
         table.set("renderMap", table.get("renderToMonitor"));
+
+        // cartographer.radar([side], [radius]) -> radar on the monitor on that side, or above the table without a side.
+        // Needs a scanner connected to the same computer.
+        table.set("radar", new VarArgFunction() {
+            @Override
+            public Varargs invoke(Varargs args) {
+                boolean hasSide = args.narg() >= 1 && args.arg(1).isstring() && !args.arg(1).isnumber();
+                String sideStr = hasSide ? args.checkjstring(1) : null;
+                BlockFace face = hasSide ? TransposerPeripheral.parseFace(sideStr) : null;
+                int radius = mapRadius(args, hasSide ? 2 : 1);
+                return SyncDispatcher.sync(plugin, () -> showLiveMap(face, sideStr, radius, true));
+            }
+        });
 
         return table;
     }

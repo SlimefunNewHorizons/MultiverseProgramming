@@ -326,9 +326,12 @@ public final class ComputerListener implements Listener {
         Material bType = block.getType();
 
         if (player.isSneaking()) {
-            if (bType == plugin.getConfigManager().getCartographerBlock() && com.multiverse.programming.peripheral.CartographerPeripheral.hasDisplaysAround(block.getLocation())) {
+            if (bType == plugin.getConfigManager().getCartographerBlock()
+                    && (com.multiverse.programming.peripheral.CartographerPeripheral.hasDisplaysAround(block.getLocation())
+                    || com.multiverse.programming.peripheral.MapDisplay.hasMapFor(block.getLocation()))) {
                 event.setCancelled(true);
                 com.multiverse.programming.peripheral.CartographerPeripheral.cleanupAdjacent(block.getLocation());
+                com.multiverse.programming.peripheral.MapDisplay.removeForCartographer(block.getLocation());
                 player.sendMessage(plugin.getPrefix() + " §aCleared Cartographer hologram and adjacent displays.");
                 return;
             }
@@ -338,9 +341,12 @@ public final class ComputerListener implements Listener {
                 player.sendMessage(plugin.getPrefix() + " §aCleared NPC entity and dialogue hologram.");
                 return;
             }
-            if (bType == plugin.getConfigManager().getMonitorBlock() && com.multiverse.programming.peripheral.MonitorPeripheral.hasDisplayAt(block.getLocation())) {
+            if (bType == plugin.getConfigManager().getMonitorBlock()
+                    && (com.multiverse.programming.peripheral.MonitorPeripheral.hasDisplayAt(block.getLocation())
+                    || com.multiverse.programming.peripheral.MapDisplay.hasMapAt(block.getLocation()))) {
                 event.setCancelled(true);
                 com.multiverse.programming.peripheral.MonitorPeripheral.removeDisplayAt(block.getLocation());
+                com.multiverse.programming.peripheral.MapDisplay.removeAt(block.getLocation());
                 player.sendMessage(plugin.getPrefix() + " §aCleared Monitor display.");
                 return;
             }
@@ -388,8 +394,9 @@ public final class ComputerListener implements Listener {
             return;
         }
 
-        if (advanced && player.isSneaking() && isProgramRunning(blockLoc)) {
+        if (advanced && player.isSneaking() && (isProgramRunning(blockLoc) || hasLiveMaps(blockLoc))) {
             stopProgramAt(blockLoc);
+            removeLiveMaps(blockLoc);
             player.sendMessage(plugin.getPrefix() + " §cForce-stopped running script on Advanced Computer at [" + blockLoc.getBlockX() + ", " + blockLoc.getBlockY() + ", " + blockLoc.getBlockZ() + "].");
             return;
         }
@@ -401,7 +408,8 @@ public final class ComputerListener implements Listener {
             return;
         }
 
-        boolean isRunning = isProgramRunning(blockLoc);
+        // A live map/radar keeps running after its script ends, so it also counts as "running" for the Stop button.
+        boolean isRunning = isProgramRunning(blockLoc) || hasLiveMaps(blockLoc);
         ItemStack savedDisk = advancedDisks.get(blockLoc);
         Inventory inv = ComputerGUI.openAdvanced(isRunning, blockLoc);
         if (savedDisk != null && !savedDisk.getType().isAir()) {
@@ -693,13 +701,41 @@ public final class ComputerListener implements Listener {
         }
     }
 
+    /** True when a cartographer touching this computer is showing a live map or radar. */
+    public static boolean hasLiveMaps(Location computerLoc) {
+        if (computerLoc == null || computerLoc.getWorld() == null) return false;
+        Block computerBlock = computerLoc.getBlock();
+        for (BlockFace face : new BlockFace[]{BlockFace.UP, BlockFace.DOWN, BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST}) {
+            if (com.multiverse.programming.peripheral.MapDisplay.hasMapFor(computerBlock.getRelative(face).getLocation())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Stops every live map or radar drawn by a cartographer touching this computer. */
+    public static void removeLiveMaps(Location computerLoc) {
+        if (computerLoc == null || computerLoc.getWorld() == null) return;
+        Block computerBlock = computerLoc.getBlock();
+        for (BlockFace face : new BlockFace[]{BlockFace.UP, BlockFace.DOWN, BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST}) {
+            com.multiverse.programming.peripheral.MapDisplay.removeForCartographer(computerBlock.getRelative(face).getLocation());
+        }
+    }
+
     private void pressAdvanced(Player player, Inventory inv, Location loc) {
         Location blockLoc = toBlockLocation(loc);
         RunningEntry running = runningPrograms.get(blockLoc);
         if (running != null && running.program().isRunning()) {
             stopEntry(blockLoc, running);
+            removeLiveMaps(blockLoc);
             player.closeInventory();
             player.sendMessage(plugin.getPrefix() + " §7Program stopped.");
+            return;
+        }
+        if (hasLiveMaps(blockLoc)) {
+            removeLiveMaps(blockLoc);
+            player.closeInventory();
+            player.sendMessage(plugin.getPrefix() + " §7Live map/radar stopped.");
             return;
         }
 
@@ -727,7 +763,7 @@ public final class ComputerListener implements Listener {
         Consumer<String> onLine = line -> Bukkit.getScheduler().runTask(plugin, () -> {
             Player target = Bukkit.getPlayer(uuid);
             if (target != null && target.isOnline()) {
-                target.sendMessage("§f" + line);
+                target.sendMessage("§f" + org.bukkit.ChatColor.translateAlternateColorCodes('&', line));
             }
         });
 

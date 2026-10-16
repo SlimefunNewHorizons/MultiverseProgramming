@@ -69,7 +69,7 @@ Supports **Minecraft 1.21.11, 26.1 and 26.2** on **Paper / Purpur** with a singl
 - **Inventory Transposer** (`transposer`): Automated item routing, precise stack transfer, and container sorting between adjacent chests.
 - **Sound Synthesizer** (`speaker`): Play custom note block melodies, instruments, tones, and octaves directly via Lua.
 - **Block & Entity Scanner** (`scanner`): Scans nearby living entities and players (health, distance, coordinates) and searches surrounding blocks by material filter.
-- **Cartographer & Map Renderer** (`cartographer`): Geographic radar, biome query, vanilla map creation (`FILLED_MAP`), and ASCII topography monitor projection.
+- **Cartographer & Map Renderer** (`cartographer`): Geographic radar, biome query, vanilla map creation (`FILLED_MAP`), and a live 128×128 terrain map with moving players on monitors.
 - **Potion & Alchemical Synthesizer** (`alchemist`): Automated brewing stand queries, recipe synthesis directly from adjacent containers, modifier and splash support.
 - **Farming / Harvesting Module** (`farmer`): Inspects crop maturity, auto-harvests mature crops, replants seeds, and fertilizes with bone meal from adjacent chests.
 - **Quarry Engine / Excavator Upgrade** (`quarry` & Turtle upgrade): Autonomous layer-by-layer excavation ($W \times L$ down to target $Y$). Can be attached laterally to a Turtle as a mobile upgrade module (travels in lockstep with the turtle, automatically deploys holographic fuel & storage chests, auto-pauses when storage fills up, and consumes 20% more fuel).

@@ -85,6 +85,17 @@ public final class PeripheralManager {
                 result.put(dirName, new NpcPeripheral(plugin, adj.getLocation()));
             }
         }
+        // Radar mode combines cartographer + scanner on the same computer.
+        ScannerPeripheral scanner = null;
+        for (Peripheral p : result.values()) {
+            if (p instanceof ScannerPeripheral s) {
+                scanner = s;
+                break;
+            }
+        }
+        for (Peripheral p : result.values()) {
+            if (p instanceof CartographerPeripheral c) c.setScanner(scanner);
+        }
         return result;
     }
 

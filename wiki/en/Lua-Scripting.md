@@ -44,7 +44,7 @@ monitor.setLine(2, "&eCPU: &cALERT")
 local text = monitor.getText()
 ```
 
-A monitor holds at most 20 lines of 256 characters. `write` scrolls (drops the oldest line) when full; `setLine` above 20 raises an error.
+A monitor holds at most 20 lines of 512 characters (color codes included). `write` scrolls (drops the oldest line) when full; `setLine` above 20 raises an error.
 
 ### 2. Auto-Crafter (`crafter`)
 
@@ -138,18 +138,75 @@ Positions in results always include absolute world coordinates (`x`, `y`, `z`) a
 
 ### 6. Cartographer & Map Renderer (`cartographer`)
 
-Inspects biomes, scans topographic elevations, renders ASCII radar views directly to adjacent monitors, and generates filled map items.
+Inspects biomes, scans topographic elevations, shows a live high-resolution terrain map (up to 128×128) above a monitor or above the table, and generates filled map items.
 
 ```lua
 -- Query current biome
 local biome = cartographer.getBiome()
 print("Biome: " .. (biome or "Unknown"))
 
--- Render topographic radar view directly onto an adjacent monitor
-local ok, err = cartographer.renderToMonitor("north", 6)
+-- Live terrain map above a monitor (OCHRE_FROGLIGHT by default) touching the CARTOGRAPHER on that side.
+-- Radius 8-64; default 64 = 128x128 blocks, one block per cell.
+local ok, err = cartographer.renderToMonitor("north")
 if ok then
-  print("Topography rendered to monitor!")
+  print("Map shown on the monitor!")
+else
+  print("Error: " .. err)  -- e.g. "No monitor on side north"
 end
+
+-- Same live map floating above the cartography table itself
+cartographer.project(32)  -- 64x64
+
+-- Radar mode: needs a SCANNER connected to the same computer, plus the cartographer and the monitor
+local ok, err = cartographer.radar("north")      -- 128x128 radar on the monitor
+cartographer.radar("north", 32)                   -- 64x64 radar with the rotating sweep beam
+cartographer.renderToMonitor("north", 64, "radar") -- same as radar("north")
+cartographer.project(32, "radar")                 -- radar above the table
+```
+
+Setup for radar mode: computer, with the scanner (observer) and the cartographer touching it, and the monitor touching the cartographer.
+
+How the live map works:
+- Terrain uses vanilla map colors blended with an elevation ramp, hill shading lit from the north-west, contour lines every 4 blocks (darker every 20) and water tinted by depth. North is up.
+- Players (white plus) move on the map twice per second. The header counts visible players. Spectators and invisible players are not shown.
+- Radar mode dims the terrain, draws range rings every quarter of the range, and also tracks hostile mobs (red plus) and animals (pink), with live counts in the header. With radius 32 or less a scan beam sweeps around once every 6 seconds; at larger sizes the beam is off because it would re-send the whole map on every step. Breaking the scanner removes the radar.
+- Unloaded chunks are drawn dark; the map never loads chunks. Terrain refreshes every 20 seconds.
+- The map stays after the program ends. It is removed with the Advanced Computer's **⏹ Stop** button (or shift+right-click on it), `cartographer.clear()`, `clearMonitor(side)`, `clearHologram()`, shift+right-click on the monitor or cartographer, or by breaking either block. It is not saved across restarts.
+
+#### Radar script with alerts
+
+Run it on an **Advanced Computer** (long loops need its unlimited run time). It turns the radar on and announces in chat, with a sound if a speaker is connected, when a player enters or leaves the range. Press **⏹ Stop** in the computer's GUI to stop everything.
+
+```lua
+-- Setup: computer + scanner + cartographer touching it; monitor touching the cartographer ("north" side)
+local RANGE = 32          -- 64x64 with the sweep beam; use 64 for 128x128 without the beam
+
+local ok, err = cartographer.radar("north", RANGE)
+if not ok then
+  print("&cCould not start the radar: " .. err)
+  return
+end
+print("&aRadar on. Press Stop on the computer to turn it off.")
+
+local inside = {}
+while true do
+  local now = {}
+  for _, p in ipairs(scanner.scanPlayers(RANGE)) do
+    now[p.name] = true
+    if not inside[p.name] then
+      print("&e[Radar] " .. p.name .. " entered at " .. math.floor(p.distance) .. " blocks")
+      if speaker then speaker.playNote("bell", 18) end
+    end
+  end
+  for name in pairs(inside) do
+    if not now[name] then print("&7[Radar] " .. name .. " left the range") end
+  end
+  inside = now
+  sleep(2)
+end
+```
+
+To just show the radar, one line is enough: `cartographer.radar("north")`. The radar keeps running after the program ends.
 
 -- Generate a vanilla filled map item (scale 0 to 4)
 -- Consumes one empty map (or paper) from an adjacent container

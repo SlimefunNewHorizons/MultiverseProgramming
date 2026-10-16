@@ -60,7 +60,7 @@ public final class ComputerGUI {
             ItemMeta buttonMeta = button.getItemMeta();
             if (buttonMeta != null) {
                 buttonMeta.setDisplayName("§c⏹ Stop Program");
-                buttonMeta.setLore(List.of("§7Program is currently running.", "§7Click to force stop execution."));
+                buttonMeta.setLore(List.of("§7A program or live map/radar is running.", "§7Click to stop it."));
                 button.setItemMeta(buttonMeta);
             }
         } else {
@@ -144,7 +144,7 @@ public final class ComputerGUI {
                 }
                 if (!result.output().isEmpty()) {
                     for (String line : result.output().split("\n")) {
-                        player.sendMessage("§f" + line);
+                        player.sendMessage("§f" + org.bukkit.ChatColor.translateAlternateColorCodes('&', line));
                     }
                 } else if (result.ok()) {
                     player.sendMessage(prefix + " §7(no output)");

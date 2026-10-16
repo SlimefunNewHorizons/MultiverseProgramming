@@ -55,7 +55,78 @@ class ComputerListenerTest {
     @AfterEach
     void tearDown() {
         ComputerListener.cancelAll();
+        com.multiverse.programming.peripheral.MapDisplay.removeAll();
         BukkitMockHelper.tearDownMockServer();
+    }
+
+    /** Advanced computer block at {@code loc} with a cartographer touching it on the east side. */
+    private Block advancedComputer(World world, Location loc, Location cartographerLoc) {
+        Block block = mock(Block.class);
+        when(block.getType()).thenReturn(Material.ENCHANTING_TABLE);
+        when(block.getLocation()).thenReturn(loc);
+        when(block.getWorld()).thenReturn(world);
+        org.bukkit.block.TileState state = mock(org.bukkit.block.TileState.class);
+        org.bukkit.persistence.PersistentDataContainer pdc = BukkitMockHelper.createMockPDC();
+        pdc.set(DiskManager.KEY_ID, org.bukkit.persistence.PersistentDataType.STRING, DiskManager.ID_ADVANCED_COMPUTER);
+        when(state.getPersistentDataContainer()).thenReturn(pdc);
+        when(block.getState()).thenReturn(state);
+        Block other = mock(Block.class);
+        when(other.getLocation()).thenReturn(new Location(world, 50, 50, 50));
+        Block cartographer = mock(Block.class);
+        when(cartographer.getLocation()).thenReturn(cartographerLoc);
+        when(block.getRelative(any(org.bukkit.block.BlockFace.class))).thenReturn(other);
+        when(block.getRelative(org.bukkit.block.BlockFace.EAST)).thenReturn(cartographer);
+        when(world.getBlockAt(any(Location.class))).thenReturn(block);
+        return block;
+    }
+
+    /** Inventory mock that remembers its items, returned by Bukkit.createInventory. */
+    private Inventory capturingInventory() {
+        Inventory inv = mock(Inventory.class);
+        ItemStack[] slots = new ItemStack[9];
+        doAnswer(i -> {
+            slots[(int) i.getArgument(0)] = i.getArgument(1);
+            return null;
+        }).when(inv).setItem(anyInt(), any());
+        when(inv.getItem(anyInt())).thenAnswer(i -> slots[(int) i.getArgument(0)]);
+        when(org.bukkit.Bukkit.getServer().createInventory(any(), anyInt(), anyString())).thenReturn(inv);
+        return inv;
+    }
+
+    private PlayerInteractEvent rightClick(Player player, Block block) {
+        return new PlayerInteractEvent(player, Action.RIGHT_CLICK_BLOCK, null, block, org.bukkit.block.BlockFace.UP, EquipmentSlot.HAND);
+    }
+
+    @Test
+    @DisplayName("Advanced computer GUI shows Run when idle and Stop while a live radar is active")
+    void testAdvancedGuiStopButtonForLiveRadar() {
+        World world = mock(World.class);
+        Location loc = new Location(world, 0, 64, 0);
+        Location cartographerLoc = new Location(world, 1, 64, 0);
+        Block computer = advancedComputer(world, loc, cartographerLoc);
+        Inventory inv = capturingInventory();
+        Player player = mock(Player.class);
+        when(player.hasPermission("multiverseprogramming.use")).thenReturn(true);
+        when(player.getUniqueId()).thenReturn(java.util.UUID.randomUUID());
+
+        listener.onBlockUse(rightClick(player, computer));
+        assertEquals(Material.EMERALD, inv.getItem(ComputerGUI.BUTTON_SLOT).getType(), "idle: Run button");
+
+        com.multiverse.programming.peripheral.MapDisplay.show(plugin, cartographerLoc, cartographerLoc, 32, true, () -> true);
+        listener.onBlockUse(rightClick(player, computer));
+        verify(player, times(2)).openInventory(inv);
+        assertEquals(Material.REDSTONE_BLOCK, inv.getItem(ComputerGUI.BUTTON_SLOT).getType(), "radar active: Stop button");
+
+        // Clicking Stop removes the radar even though no Lua program is running
+        InventoryView view = mock(InventoryView.class);
+        when(view.getPlayer()).thenReturn(player);
+        when(view.getTitle()).thenReturn(ComputerGUI.ADVANCED_TITLE);
+        when(view.getTopInventory()).thenReturn(inv);
+        InventoryClickEvent click = new InventoryClickEvent(view, org.bukkit.event.inventory.InventoryType.SlotType.CONTAINER,
+                ComputerGUI.BUTTON_SLOT, ClickType.LEFT, org.bukkit.event.inventory.InventoryAction.PICKUP_ALL);
+        listener.onInventoryClick(click);
+        verify(player).sendMessage(contains("radar stopped"));
+        assertFalse(ComputerListener.hasLiveMaps(loc));
     }
 
     @Test

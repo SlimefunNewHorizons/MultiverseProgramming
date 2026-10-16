@@ -114,12 +114,12 @@ Al ejecutarse un programa, `PeripheralManager.bindAll(globals, plugin, location,
 
 | Periférico | Bloque | Variable Lua | Funciones Clave |
 | :--- | :--- | :--- | :--- |
-| **Monitor** | `OCHRE_FROGLIGHT` | `monitor` | `write(text)`, `setText(text)`, `setLine(n, text)`, `getLine(n)`, `getText()`, `getLineCount()`, `clear()` (máx. 20 líneas x 256 caracteres) |
+| **Monitor** | `OCHRE_FROGLIGHT` | `monitor` | `write(text)`, `setText(text)`, `setLine(n, text)`, `getLine(n)`, `getText()`, `getLineCount()`, `clear()` (máx. 20 líneas x 512 caracteres) |
 | **Crafter** | `CRAFTER` | `crafter` | `craft()`, `getItems()`, `isCrafting()`, `isSlotDisabled(slot)`, `setSlotDisabled(slot, bool)` |
 | **Transposer** | `HOPPER` | `transposer` | `getDirections()`, `getSlotCount(dir)`, `getItem(dir, slot)`, `getAllItems(dir)`, `transferItem(fromDir, toDir, fromSlot, [count], [toSlot])`, `compareItems(...)` |
 | **Speaker** | `NOTE_BLOCK` | `speaker` | `playNote(instrument, note)`, `playTone(freqHz)`, `playSound(name, [volume], [pitch])` |
 | **Scanner** | `OBSERVER` | `scanner` | `scanEntities(radius)`, `scanPlayers(radius)`, `scanBlocks(radius, mat)`, `inspect(dx, dy, dz)` |
-| **Cartographer** | `CARTOGRAPHY_TABLE` | `cartographer` | `getBiome()`, `scanTopography(radius)`, `createMap(scale)`, `project(radius)`, `renderToMonitor(side, radius)`, `setHologram(text)`, `clear([side])` |
+| **Cartographer** | `CARTOGRAPHY_TABLE` | `cartographer` | `getBiome()`, `scanTopography(radius)`, `createMap(scale)`, `project([radio])`, `renderToMonitor(lado, [radio], [modo])`, `radar([lado], [radio])` (mapa en vivo, radio 8-64, por defecto 64 = 128×128; el modo radar necesita un scanner en la misma computadora), `setHologram(text)`, `clear([side])` |
 | **Alchemist** | `BREWING_STAND` | `alchemist` | `brew(type, [modifier], [splash])`, `getRecipes()`, `inspectStand()` |
 | **Farmer** | `COMPOSTER` | `farmer` | `inspectCrop(lado o dx, dy, dz)`, `harvest(lado o dx, dy, dz, [replant])`, `harvestArea(radius, [replant])`, `fertilize(lado o dx, dy, dz)` |
 | **NPC** | `SCULK_CATALYST` | `npc` | `setName(name)`, `spawn([tipo])`, `say([jugador], msg)`, `ask([jugador], pregunta, opciones)`, `getLastResponse([jugador])`, `setHologram(texto)`, `despawn()` |

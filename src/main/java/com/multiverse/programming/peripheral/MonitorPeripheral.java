@@ -29,7 +29,10 @@ public final class MonitorPeripheral implements Peripheral {
     public static final String SCOREBOARD_TAG = "multiverse_monitor";
     // Caps keep the TextDisplay packet small and stop setLine(huge) from exhausting memory.
     public static final int MAX_LINES = 20;
-    public static final int MAX_LINE_LENGTH = 256;
+    // Counts color codes too: a full-color map row (hex code per cell) needs ~300 chars.
+    public static final int MAX_LINE_LENGTH = 512;
+    // TextDisplay wraps at 200px by default, which would break wide rows such as the cartographer map.
+    public static final int LINE_WIDTH = 1000;
     private final JavaPlugin plugin;
     private final Location location;
     private final List<String> lines = new ArrayList<>();
@@ -73,6 +76,7 @@ public final class MonitorPeripheral implements Peripheral {
                     d.setShadowed(true);
                 });
             }
+            display.setLineWidth(LINE_WIDTH);
             display.setText(ChatColor.translateAlternateColorCodes('&', fullText));
         });
     }
