@@ -34,11 +34,106 @@ public final class BlueprintParser {
 
     public static Blueprint parseCompound(String id, String fileName, NbtTag.CompoundTag root) throws IOException {
         String lower = fileName.toLowerCase(Locale.ROOT);
-        if (lower.endsWith(".litematic") || root.contains("Metadata") || root.contains("Regions")) {
+        if (lower.endsWith(".litematic") || (root.contains("Metadata") && root.contains("Regions"))) {
             return parseLitematic(id, fileName, root);
+        } else if (lower.endsWith(".schem") || (root.contains("Width") && root.contains("Palette") && root.contains("BlockData"))) {
+            return parseSpongeSchematic(id, fileName, root);
         } else {
             return parseVanillaStructure(id, fileName, root);
         }
+    }
+
+    private static Blueprint parseSpongeSchematic(String id, String fileName, NbtTag.CompoundTag root) throws IOException {
+        String name = resolveCleanName(null, fileName);
+        String author = "Unknown";
+        NbtTag.CompoundTag metadata = root.getCompound("Metadata");
+        if (metadata != null) {
+            author = metadata.getString("Author", author);
+            String metaName = metadata.getString("Name", null);
+            if (metaName != null && !metaName.isBlank()) {
+                name = resolveCleanName(metaName, fileName);
+            }
+        }
+
+        int sizeX = Math.max(1, root.getInt("Width", 1));
+        int sizeY = Math.max(1, root.getInt("Height", 1));
+        int sizeZ = Math.max(1, root.getInt("Length", 1));
+
+        NbtTag.CompoundTag paletteTag = root.getCompound("Palette");
+        Map<Integer, String> idToBlock = new java.util.HashMap<>();
+        Map<Integer, String> idToItem = new java.util.HashMap<>();
+
+        if (paletteTag != null) {
+            for (Map.Entry<String, NbtTag> entry : paletteTag.value().entrySet()) {
+                if (entry.getValue() instanceof NbtTag.IntTag it) {
+                    String blockState = entry.getKey();
+                    if (!blockState.contains(":")) {
+                        blockState = "minecraft:" + blockState;
+                    }
+                    idToBlock.put(it.value(), blockState);
+                    idToItem.put(it.value(), resolveItemName(cleanMaterial(blockState)));
+                }
+            }
+        }
+
+        byte[] blockData = root.getByteArray("BlockData");
+        List<Blueprint.PlacementBlock> blocks = new ArrayList<>();
+        Map<String, Integer> materialCounts = new LinkedHashMap<>();
+
+        if (blockData != null && !idToBlock.isEmpty()) {
+            int index = 0;
+            int totalExpected = sizeX * sizeY * sizeZ;
+            for (int i = 0; i < totalExpected && index < blockData.length; i++) {
+                int value = 0;
+                int shift = 0;
+                while (index < blockData.length) {
+                    byte b = blockData[index++];
+                    value |= (b & 0x7F) << shift;
+                    if ((b & 0x80) == 0) {
+                        break;
+                    }
+                    shift += 7;
+                }
+
+                String mat = idToBlock.getOrDefault(value, "minecraft:air");
+                if (!isAir(mat)) {
+                    int x = i % sizeX;
+                    int z = (i / sizeX) % sizeZ;
+                    int y = i / (sizeX * sizeZ);
+
+                    blocks.add(new Blueprint.PlacementBlock(x, y, z, mat));
+                    String item = idToItem.getOrDefault(value, cleanMaterial(mat));
+                    boolean isUpperHalf = mat.contains("half=upper") || mat.contains("part=head");
+                    if (!isUpperHalf) {
+                        materialCounts.put(item, materialCounts.getOrDefault(item, 0) + 1);
+                    }
+                }
+            }
+        }
+
+        // Sort blocks: layer by layer (y), placement priority, then z and x
+        blocks.sort((a, b) -> {
+            if (a.y() != b.y()) return Integer.compare(a.y(), b.y());
+            int pA = getPlacementPriority(a.material());
+            int pB = getPlacementPriority(b.material());
+            if (pA != pB) return Integer.compare(pA, pB);
+            if (a.z() != b.z()) return Integer.compare(a.z(), b.z());
+            return Integer.compare(a.x(), b.x());
+        });
+
+        return new Blueprint(
+                id,
+                name,
+                author,
+                "schem",
+                sizeX,
+                sizeY,
+                sizeZ,
+                blocks.size(),
+                materialCounts,
+                blocks,
+                System.currentTimeMillis()
+        );
     }
 
     private static Blueprint parseVanillaStructure(String id, String fileName, NbtTag.CompoundTag root) throws IOException {
@@ -398,7 +493,7 @@ public final class BlueprintParser {
     }
 
     public static String resolveCleanName(String metadataName, String fileName) {
-        String cleanFile = fileName != null ? fileName.replaceFirst("\\.(?i)(litematic|nbt)$", "").trim() : "";
+        String cleanFile = fileName != null ? fileName.replaceFirst("\\.(?i)(litematic|nbt|schem)$", "").trim() : "";
         if (metadataName == null || metadataName.isBlank()) {
             return cleanFile.isEmpty() ? "Unnamed Blueprint" : cleanFile;
         }

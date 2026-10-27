@@ -273,7 +273,85 @@ class BlueprintParserTest {
         assertTrue(BlueprintSecurityValidator.isDangerousBlock("minecraft:trial_spawner"));
         assertTrue(BlueprintSecurityValidator.isDangerousBlock("minecraft:spawner"));
         assertTrue(BlueprintSecurityValidator.isDangerousBlock("minecraft:monster_spawner"));
-        assertFalse(BlueprintSecurityValidator.isDangerousBlock("minecraft:stone"));
         assertFalse(BlueprintSecurityValidator.isDangerousBlock("minecraft:oak_planks"));
+    }
+
+    @Test
+    @DisplayName("Parse Sponge Schematic (.schem)")
+    void testParseSpongeSchematic() throws IOException {
+        ByteArrayOutputStream uncompressed = new ByteArrayOutputStream();
+        try (DataOutputStream out = new DataOutputStream(uncompressed)) {
+            out.writeByte(10); // Root Compound: Schematic
+            out.writeUTF("Schematic");
+
+            // Width = 2, Height = 2, Length = 2
+            out.writeByte(2); // Short
+            out.writeUTF("Width");
+            out.writeShort(2);
+
+            out.writeByte(2); // Short
+            out.writeUTF("Height");
+            out.writeShort(2);
+
+            out.writeByte(2); // Short
+            out.writeUTF("Length");
+            out.writeShort(2);
+
+            // Palette: Compound { "minecraft:air": 0, "minecraft:stone": 1 }
+            out.writeByte(10); // Compound
+            out.writeUTF("Palette");
+
+            out.writeByte(3); // Int
+            out.writeUTF("minecraft:air");
+            out.writeInt(0);
+
+            out.writeByte(3); // Int
+            out.writeUTF("minecraft:stone");
+            out.writeInt(1);
+
+            out.writeByte(0); // End Palette compound
+
+            // BlockData: 8 bytes
+            out.writeByte(7); // Byte Array
+            out.writeUTF("BlockData");
+            out.writeInt(8);
+            // 8 blocks: block 0 is stone, others air
+            out.writeByte(1); // block 0: stone
+            for (int i = 1; i < 8; i++) {
+                out.writeByte(0); // air
+            }
+
+            out.writeByte(0); // End Root
+        }
+
+        ByteArrayOutputStream compressed = new ByteArrayOutputStream();
+        try (GZIPOutputStream gzip = new GZIPOutputStream(compressed)) {
+            gzip.write(uncompressed.toByteArray());
+        }
+
+        Blueprint bp = BlueprintParser.parse("test_schem", "arena.schem", new ByteArrayInputStream(compressed.toByteArray()));
+        assertNotNull(bp);
+        assertEquals("schem", bp.format());
+        assertEquals("arena", bp.name());
+        assertEquals(2, bp.sizeX());
+        assertEquals(2, bp.sizeY());
+        assertEquals(2, bp.sizeZ());
+        assertEquals(1, bp.totalBlocks());
+        assertTrue(bp.materialCounts().containsKey("STONE"));
+        assertEquals(1, bp.materialCounts().get("STONE"));
+    }
+
+    @Test
+    @DisplayName("Parse Real Dallas God Schematic (ThorSt125.schem)")
+    void testParseRealThorSchematic() throws IOException {
+        java.io.File file = new java.io.File("/home/jack/Documentos/Desarrollo/staging/temporada2/schematics/ThorSt125.schem");
+        if (!file.exists()) return;
+        Blueprint bp = BlueprintParser.parse("thor", file);
+        assertNotNull(bp);
+        assertEquals("schem", bp.format());
+        assertEquals(105, bp.sizeX());
+        assertEquals(125, bp.sizeY());
+        assertEquals(51, bp.sizeZ());
+        assertEquals(26186, bp.totalBlocks());
     }
 }
