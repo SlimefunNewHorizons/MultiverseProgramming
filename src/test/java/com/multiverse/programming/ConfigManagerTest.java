@@ -69,13 +69,13 @@ class ConfigManagerTest {
     }
 
     @Test
-    @DisplayName("web-portal-public-url migrates the pre-move DrakesCraft-Labs URL and keeps custom ones")
+    @DisplayName("web-portal-public-url migrates the pre-move SlimefunNewHorizons URL and keeps custom ones")
     void testResolveWebPortalPublicUrl() {
         String current = ConfigManager.DEFAULT_WEB_PORTAL_PUBLIC_URL;
         assertEquals(current, ConfigManager.resolveWebPortalPublicUrl(null));
         assertEquals(current, ConfigManager.resolveWebPortalPublicUrl("   "));
         assertEquals(current, ConfigManager.resolveWebPortalPublicUrl("https://drakescraft-labs.github.io/MultiverseProgramming/"));
-        assertEquals(current, ConfigManager.resolveWebPortalPublicUrl(" https://DrakesCraft-Labs.github.io/MultiverseProgramming "));
+        assertEquals(current, ConfigManager.resolveWebPortalPublicUrl(" https://SlimefunNewHorizons.github.io/MultiverseProgramming "));
         assertEquals("https://portal.example.net/", ConfigManager.resolveWebPortalPublicUrl(" https://portal.example.net/ "));
     }
 }
