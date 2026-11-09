@@ -1,4 +1,4 @@
-# Publicacion a Modrinth para un addon de DrakesCraft.
+# Publicacion a Modrinth para un addon de Slimefun: New Horizons (DrakesCraft).
 #
 # QUE HACE
 #   - Compila el addon y publica el jar en Modrinth.
@@ -137,7 +137,7 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Clonar dependencias DrakesCraft Maven Repo
+      - name: "Clonar dependencias del Maven Repo de Slimefun: New Horizons"
         run: |
           mkdir -p ~/.m2/repository
           git clone --depth 1 https://github.com/SlimefunNewHorizons/maven-repo.git /tmp/drakes-maven-repo
@@ -264,6 +264,7 @@ jobs:
             paper
             purpur
             spigot
+          # Versiones soportadas: el jar (API 1.21.11, bytecode Java 21) funciona en las tres.
           game-versions: |
             1.21.11
             26.1
