@@ -13,6 +13,8 @@ import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.BookMeta;
+import org.bukkit.inventory.meta.ItemMeta;
 
 /**
  * Prevents players from placing writable books, written books, or storage containers
@@ -52,6 +54,27 @@ public final class ItemSecurityListener implements Listener {
         return isStorageBlock(mat) || isForbiddenBook(mat);
     }
 
+    /**
+     * Allows a completely blank, unsigned Book and Quill (no pages, no custom PDC)
+     * in Item Frames so Slimefun addons like FlowerPower (Magic Basin -> Experience Book)
+     * work without opening book-ban / chunk-overload / NBT dupe vectors.
+     */
+    public static boolean isEmptyWritableBook(ItemStack item) {
+        if (item == null || item.getType() != Material.WRITABLE_BOOK) return false;
+        if (!item.hasItemMeta()) return true;
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return true;
+        if (!meta.getPersistentDataContainer().isEmpty()) return false;
+        if (meta instanceof BookMeta bookMeta) {
+            if (bookMeta.getPageCount() == 0) return true;
+            for (String page : bookMeta.getPages()) {
+                if (page != null && !page.isBlank()) return false;
+            }
+            return true;
+        }
+        return false;
+    }
+
     public static boolean isForbiddenInBookshelf(Material mat) {
         return isForbiddenBook(mat) || isStorageBlock(mat);
     }
@@ -73,7 +96,7 @@ public final class ItemSecurityListener implements Listener {
                     ? player.getInventory().getItemInOffHand()
                     : player.getInventory().getItemInMainHand();
 
-            if (item != null && isForbiddenInItemFrame(item.getType())) {
+            if (item != null && isForbiddenInItemFrame(item.getType()) && !isEmptyWritableBook(item)) {
                 event.setCancelled(true);
                 player.sendMessage(plugin.getPrefix() + " §cPlacing books or storage containers in item frames is prohibited to prevent duplication exploits.");
             }
