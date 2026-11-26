@@ -12,7 +12,7 @@ Authors are taken from the repository history (GitHub contributors) and from the
 
 ## License
 
-- Declared license: **Other**. The upstream license text in [LICENSE](../LICENSE) is kept unchanged; modifications by DrakesCraft Labs are distributed under the same license.
+- Declared license: **Sovereign Creation License — Chagui68 for DrakesCraft**. The upstream license text in [LICENSE](../LICENSE) is kept unchanged; modifications by DrakesCraft Labs are distributed under the same license.
 
 ## What we changed
 
